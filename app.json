@@ -1,0 +1,12 @@
+{
+    "name": "package-zipper",
+    "description": "A small server which can download java package with or with out its transitive dependencies and stream it on the fly to a client.",
+    "repository": "https://github.com/dordor12/package-zipper",
+    "env": {
+      "ZIP_STREAMER": {
+        "description": "a url to your zipstreamer(https://github.com/scosman/zipstreamer) deployment",
+        "required": true
+      }
+    },
+    "keywords": ["java", "maven", "gradle", "zip", "stream", "package", "download", "dependencies"]
+  }
