@@ -1,7 +1,7 @@
 ## About
 
-package-zipper is a java project for downloading and streaming java packages and there dependecies as zip files from maven repository.\
-this project depent on [zipstreamer](https://github.com/scosman/zipstreamer) for streaming all the package dependencies into a zip file.\
+package-zipper is a java project for downloading and streaming java packages and there dependecies as zip files from maven repository.
+this project depent on [zipstreamer](https://github.com/scosman/zipstreamer) for streaming all the package dependencies into a zip file.
 
 Highlights include:
 
@@ -16,8 +16,8 @@ I was struggling with the problem of downloading java packages from maven reposi
 
 ## Deploy
 
-First go to [here](https://github.com/scosman/zipstreamer), give this project a star and follow the deployment instructions on heroku.\
-after the deployment take the app url and use it as the ZIP_STREAMER env.\
+First go to [here](https://github.com/scosman/zipstreamer), give this project a star and follow the deployment instructions on heroku.
+after the deployment take the app url and use it as the ZIP_STREAMER env.
 
 [![Deploy](https://www.herokucdn.com/deploy/button.svg)](https://heroku.com/deploy)
 
