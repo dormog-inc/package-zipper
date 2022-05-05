@@ -1,0 +1,11 @@
+server:
+    port: "${PORT:8080}"
+springdoc:
+  swagger-ui:
+    path: "/"
+spring:
+  mvc:
+    log-request-details: true
+package-zipper:
+    maven-url: "https://repo1.maven.org/maven2"
+    stream-zipper-url: "https://gradlezipstreamer.herokuapp.com"
