@@ -1,16 +1,10 @@
 package com.dor.package_zipper.services;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-
 import com.dor.package_zipper.configuration.AppConfig;
-import com.dor.package_zipper.models.ArtifactDTO;
+import com.dor.package_zipper.models.Artifact;
 import com.dor.package_zipper.models.ZipRemoteEntry;
-
+import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolvedArtifact;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolverSystem;
@@ -18,34 +12,38 @@ import org.jboss.shrinkwrap.resolver.api.maven.MavenStrategyStage;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
 @Slf4j
 public class ArtifactResolverService {
-    private AppConfig appConfig;
+    private final AppConfig appConfig;
 
-    public List<ZipRemoteEntry> resolveArtifacrt(ArtifactDTO artifact, boolean withTransitivity) {
+    public List<ZipRemoteEntry> resolveArtifact(Artifact artifact, boolean withTransitivity) {
         MavenStrategyStage mavenStrategyStage = Maven.resolver().resolve(artifact.getArtifactFullName());
         List<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
-        zipRemoteEntries.addAll(getRemoteEntryFromLibary(artifact));
+        zipRemoteEntries.addAll(getRemoteEntryFromLibrary(artifact));
         return zipRemoteEntries;
     }
 
-    public List<ZipRemoteEntry> resolveArtifacrts(List<ArtifactDTO> artifacts, boolean withTransitivity) {
+    public List<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, boolean withTransitivity) {
         MavenResolverSystem mavenResolverSystem = Maven.resolver();
         MavenStrategyStage mavenStrategyStage = mavenResolverSystem.resolve(
-                artifacts.stream().map(artifact -> artifact.getArtifactFullName()).collect(Collectors.toList()));
+                artifacts.stream().map(Artifact::getArtifactFullName).collect(Collectors.toList()));
         List<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
         artifacts.forEach(artifact -> {
-            zipRemoteEntries.addAll(getRemoteEntryFromLibary(artifact));
+            zipRemoteEntries.addAll(getRemoteEntryFromLibrary(artifact));
         });
         return zipRemoteEntries;
     }
 
-    public List<ZipRemoteEntry> resolveArtifacrtFromPom(MultipartFile pomFile, boolean withTransitivity) {
+    public List<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean withTransitivity) {
         List<ZipRemoteEntry> zipRemoteEntries = null;
         Path path = Paths.get(
                 pomFile.getOriginalFilename().replace(".pom", "") + "_" + System.currentTimeMillis() / 1000L + "_pom.xml");
@@ -53,8 +51,8 @@ public class ArtifactResolverService {
             pomFile.transferTo(path);
             MavenResolverSystem mavenResolverSystem = Maven.resolver();
             MavenStrategyStage mavenStrategyStage = mavenResolverSystem.loadPomFromFile(path.toFile())
-            .importCompileAndRuntimeDependencies()
-            .importTestDependencies().resolve();
+                    .importCompileAndRuntimeDependencies()
+                    .importTestDependencies().resolve();
             zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
         } catch (Exception e) {
             log.error("error create tmp pom file", e);
@@ -65,7 +63,7 @@ public class ArtifactResolverService {
     }
 
     private List<ZipRemoteEntry> resolveMavenStrategy(boolean withTransitivity,
-            MavenStrategyStage mavenStrategyStage) {
+                                                      MavenStrategyStage mavenStrategyStage) {
         List<MavenResolvedArtifact> mavenArtifacts = new ArrayList<MavenResolvedArtifact>();
         if (withTransitivity) {
             mavenArtifacts.addAll(mavenStrategyStage
@@ -74,22 +72,19 @@ public class ArtifactResolverService {
             mavenArtifacts.addAll(mavenStrategyStage
                     .withoutTransitivity().asList(MavenResolvedArtifact.class));
         }
-        List<ZipRemoteEntry> zipRemoteEntries = mavenArtifacts.stream().map(mavenArtifact -> {
-            return Arrays.stream(mavenArtifact.getDependencies()).map(dependency -> getRemoteEntryFromLibary(
-                    new ArtifactDTO(
-                            dependency.getCoordinate().getGroupId(),
-                            dependency.getCoordinate().getArtifactId(),
-                            dependency.getCoordinate().getVersion())))
-                    .flatMap(List::stream)
-                    .collect(Collectors.toList());
-        })
+
+        return mavenArtifacts.stream().map(mavenArtifact -> Arrays.stream(mavenArtifact.getDependencies()).map(dependency -> getRemoteEntryFromLibrary(
+                                new Artifact(
+                                        dependency.getCoordinate().getGroupId(),
+                                        dependency.getCoordinate().getArtifactId(),
+                                        dependency.getCoordinate().getVersion())))
+                        .flatMap(List::stream)
+                        .collect(Collectors.toList()))
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
-
-        return zipRemoteEntries;
     }
 
-    private List<ZipRemoteEntry> getRemoteEntryFromLibary(ArtifactDTO artifact) {
+    private List<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact) {
         List<ZipRemoteEntry> zipEntries = new ArrayList<>();
         String path = String.format("%s/%s/%s/%s-%s",
                 artifact.getGroupId().replace(".", "/"),

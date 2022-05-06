@@ -1,35 +1,26 @@
 package com.dor.package_zipper.models;
 
+import lombok.*;
+
 import java.io.Serializable;
-
-
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @RequiredArgsConstructor
-@Getter
-@Setter
-public class ArtifactDTO implements Serializable {
+public class Artifact implements Serializable {
     @NonNull
     private String groupId;
     @NonNull
     private String artifactId;
     @NonNull
     private String version;
+    @Builder.Default
     private String packagingType = "jar";
     private String classifier;
 
-    public ArtifactDTO(String fullNameArtifact) {
+    public Artifact(String fullNameArtifact) {
         String[] split = fullNameArtifact.split(":");
         if (split.length < 3) {
             throw new RuntimeException("The artifact name should have format: groupId:artifactId:version");

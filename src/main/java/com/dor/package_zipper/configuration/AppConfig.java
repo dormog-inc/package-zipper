@@ -9,7 +9,6 @@ import lombok.Data;
 @ConfigurationProperties(prefix = "package-zipper")
 @Data
 public class AppConfig {
-    
     private String mavenUrl;
     private String streamZipperUrl;
 }
