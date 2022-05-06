@@ -1,16 +1,10 @@
 package com.dor.package_zipper.services;
 
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-
 import com.dor.package_zipper.configuration.AppConfig;
 import com.dor.package_zipper.models.Artifact;
 import com.dor.package_zipper.models.ZipRemoteEntry;
-
+import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolvedArtifact;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolverSystem;
@@ -18,8 +12,12 @@ import org.jboss.shrinkwrap.resolver.api.maven.MavenStrategyStage;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import lombok.AllArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @AllArgsConstructor
@@ -53,8 +51,8 @@ public class ArtifactResolverService {
             pomFile.transferTo(path);
             MavenResolverSystem mavenResolverSystem = Maven.resolver();
             MavenStrategyStage mavenStrategyStage = mavenResolverSystem.loadPomFromFile(path.toFile())
-            .importCompileAndRuntimeDependencies()
-            .importTestDependencies().resolve();
+                    .importCompileAndRuntimeDependencies()
+                    .importTestDependencies().resolve();
             zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
         } catch (Exception e) {
             log.error("error create tmp pom file", e);
@@ -65,7 +63,7 @@ public class ArtifactResolverService {
     }
 
     private List<ZipRemoteEntry> resolveMavenStrategy(boolean withTransitivity,
-            MavenStrategyStage mavenStrategyStage) {
+                                                      MavenStrategyStage mavenStrategyStage) {
         List<MavenResolvedArtifact> mavenArtifacts = new ArrayList<MavenResolvedArtifact>();
         if (withTransitivity) {
             mavenArtifacts.addAll(mavenStrategyStage
@@ -76,12 +74,12 @@ public class ArtifactResolverService {
         }
 
         return mavenArtifacts.stream().map(mavenArtifact -> Arrays.stream(mavenArtifact.getDependencies()).map(dependency -> getRemoteEntryFromLibrary(
-                new Artifact(
-                        dependency.getCoordinate().getGroupId(),
-                        dependency.getCoordinate().getArtifactId(),
-                        dependency.getCoordinate().getVersion())))
-                .flatMap(List::stream)
-                .collect(Collectors.toList()))
+                                new Artifact(
+                                        dependency.getCoordinate().getGroupId(),
+                                        dependency.getCoordinate().getArtifactId(),
+                                        dependency.getCoordinate().getVersion())))
+                        .flatMap(List::stream)
+                        .collect(Collectors.toList()))
                 .flatMap(List::stream)
                 .collect(Collectors.toList());
     }
