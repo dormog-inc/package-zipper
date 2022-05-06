@@ -86,27 +86,6 @@ public class PackageZipperController {
 
       }
 
-      @PostMapping(value = "/zip/stream/build-gradle", consumes = {"multipart/form-data"})
-      public ResponseEntity<StreamingResponseBody> getBuildGradleArtifactsZip(@RequestParam("file") MultipartFile pomFile,
-                  @RequestParam(defaultValue = "true", name = "transitivity") boolean transitivity) {
-            final Flux<DataBuffer> dataBufferFlux = getZipStream(
-                        artifactResolverService.resolveArtifactFromPom(pomFile, transitivity));
-            StreamingResponseBody stream = output -> DataBufferUtils
-                        .write(dataBufferFlux,
-                                    output)
-                        .doOnError(e -> log.error("Error writing to stream", e))
-                        .doOnComplete(() -> log.info("Streaming pom artifact zip complete artifact: {}",
-                                    pomFile.getOriginalFilename()))
-                        .blockLast();
-            // TODO mabye need use DataBufferUtils.releaseConsumer()
-            return ResponseEntity.ok()
-                        .header(HttpHeaders.CONTENT_DISPOSITION,
-                                    "attachment; filename=" + pomFile.getOriginalFilename().replace(".pom","") +".zip")
-                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                        .body(stream);
-
-      }
-
       @GetMapping(value = "/zip/stream")
       public ResponseEntity<StreamingResponseBody> getStreamArtifactZip(@RequestParam String groupId,
                   @RequestParam String artifactId, @RequestParam String version,
