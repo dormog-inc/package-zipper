@@ -24,6 +24,7 @@ public class Artifact implements Serializable {
     private String artifactId;
     @NonNull
     private String version;
+    @Builder.Default
     private String packagingType = "jar";
     private String classifier;
 
