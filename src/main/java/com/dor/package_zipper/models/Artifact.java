@@ -17,9 +17,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 @RequiredArgsConstructor
-@Getter
-@Setter
-public class ArtifactDTO implements Serializable {
+public class Artifact implements Serializable {
     @NonNull
     private String groupId;
     @NonNull
@@ -29,7 +27,7 @@ public class ArtifactDTO implements Serializable {
     private String packagingType = "jar";
     private String classifier;
 
-    public ArtifactDTO(String fullNameArtifact) {
+    public Artifact(String fullNameArtifact) {
         String[] split = fullNameArtifact.split(":");
         if (split.length < 3) {
             throw new RuntimeException("The artifact name should have format: groupId:artifactId:version");
