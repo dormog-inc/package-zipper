@@ -31,16 +31,17 @@ dependencies {
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-impl-maven:3.1.4'
 	implementation 'org.springdoc:springdoc-openapi-ui:1.6.8'
 	implementation 'org.springdoc:springdoc-openapi-webflux-ui:1.6.8'
-
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-api-maven:3.1.4'
-
+	implementation 'com.github.docker-java:docker-java-core:3.2.13'
+	implementation 'com.github.docker-java:docker-java-transport-netty:3.2.13'
+	implementation 'com.github.docker-java:docker-java-transport-zerodep:3.2.13'
+	implementation 'com.github.docker-java:docker-java-transport-httpclient5:3.2.13'
+	implementation 'com.github.docker-java:docker-java-transport-okhttp:3.2.13'
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
-
-	
 }
 
 tasks.named('test') {

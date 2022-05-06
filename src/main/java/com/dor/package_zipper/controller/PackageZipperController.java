@@ -3,6 +3,7 @@ package com.dor.package_zipper.controller;
 import java.util.List;
 
 import com.dor.package_zipper.configuration.AppConfig;
+import com.dor.package_zipper.exceptions.ArtifactNameIncludesToManyColons;
 import com.dor.package_zipper.models.Artifact;
 import com.dor.package_zipper.models.ZipRemoteEntry;
 import com.dor.package_zipper.models.ZipStreamerBody;
@@ -38,6 +39,12 @@ public class PackageZipperController {
 
       @PostMapping("/zip/stream")
       public ResponseEntity<StreamingResponseBody> StreamArtifactZip(@RequestBody Artifact artifact,
+                  @RequestParam(defaultValue = "true") boolean transitivity) {
+            return StreamZippedArtifact(artifact, transitivity);
+      }
+
+      @PostMapping("/zip/fat-stream")
+      public ResponseEntity<StreamingResponseBody> StreamFatArtifactZip(@RequestBody Artifact artifact,
                   @RequestParam(defaultValue = "true") boolean transitivity) {
             return StreamZippedArtifact(artifact, transitivity);
       }
@@ -86,6 +93,27 @@ public class PackageZipperController {
 
       }
 
+      @PostMapping(value = "/zip/stream/build-gradle", consumes = {"multipart/form-data"})
+      public ResponseEntity<StreamingResponseBody> getBuildGradleArtifactsZip(@RequestParam("file") MultipartFile pomFile,
+                  @RequestParam(defaultValue = "true", name = "transitivity") boolean transitivity) {
+            final Flux<DataBuffer> dataBufferFlux = getZipStream(
+                        artifactResolverService.resolveArtifactFromPom(pomFile, transitivity));
+            StreamingResponseBody stream = output -> DataBufferUtils
+                        .write(dataBufferFlux,
+                                    output)
+                        .doOnError(e -> log.error("Error writing to stream", e))
+                        .doOnComplete(() -> log.info("Streaming pom artifact zip complete artifact: {}",
+                                    pomFile.getOriginalFilename()))
+                        .blockLast();
+            // TODO mabye need use DataBufferUtils.releaseConsumer()
+            return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_DISPOSITION,
+                                    "attachment; filename=" + pomFile.getOriginalFilename().replace(".pom","") +".zip")
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                        .body(stream);
+
+      }
+
       @GetMapping(value = "/zip/stream")
       public ResponseEntity<StreamingResponseBody> getStreamArtifactZip(@RequestParam String groupId,
                   @RequestParam String artifactId, @RequestParam String version,
@@ -97,7 +125,12 @@ public class PackageZipperController {
       @GetMapping(value = "/zip/stream/{artifact}")
       public ResponseEntity<StreamingResponseBody> getStreamArtifactZip(@PathVariable String artifact,
                   @RequestParam(defaultValue = "true") boolean transitivity) {
-            Artifact artifactObj = new Artifact(artifact);
+            Artifact artifactObj = null;
+            try {
+                  artifactObj = new Artifact(artifact);
+            } catch (ArtifactNameIncludesToManyColons artifactNameIncludesToManyColons) {
+                  artifactNameIncludesToManyColons.printStackTrace();
+            }
 
             return StreamZippedArtifact(artifactObj, transitivity);
       }
