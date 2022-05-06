@@ -1,6 +1,7 @@
 server:
     port: "${PORT:8080}"
 springdoc:
+  version: "${VERSION:1.0.0}"
   swagger-ui:
     path: "/"
 spring:
