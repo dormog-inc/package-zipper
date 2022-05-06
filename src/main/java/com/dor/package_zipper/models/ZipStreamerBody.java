@@ -1,4 +1,3 @@
-
 package com.dor.package_zipper.models;
 
 import lombok.AllArgsConstructor;

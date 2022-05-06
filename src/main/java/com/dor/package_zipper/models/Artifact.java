@@ -1,17 +1,8 @@
 package com.dor.package_zipper.models;
 
+import lombok.*;
+
 import java.io.Serializable;
-
-
-import com.dor.package_zipper.exceptions.ArtifactNameIncludesToManyColons;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Data;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 
 @Data
 @Builder
@@ -25,6 +16,7 @@ public class Artifact implements Serializable {
     private String artifactId;
     @NonNull
     private String version;
+    @Builder.Default
     private String packagingType = "jar";
     private String classifier;
 

@@ -2,6 +2,9 @@ plugins {
 	id 'org.springframework.boot' version '2.6.6'
 	id 'io.spring.dependency-management' version '1.0.11.RELEASE'
 	id 'org.asciidoctor.convert' version '1.5.8'
+	id 'com.github.johnrengelman.shadow' version '7.1.2'
+	id 'org.owasp.dependencycheck' version '7.0.3'
+	id 'checkstyle'
 	id 'java'
 }
 
@@ -53,3 +56,25 @@ tasks.named('asciidoctor') {
 	inputs.dir snippetsDir
 	dependsOn test
 }
+
+checkstyle {
+	configFile = new File(rootDir, "checkstyle/checkstyle.xml")
+}
+
+tasks.withType(Checkstyle) {
+	reports {
+		html.destination rootProject.file("build/reports/checkstyle.html")
+	}
+}
+
+configure(checkstyleMain) {
+	group = 'Verification'
+	description = 'Run checkstyle on all main Java sources'
+}
+
+configure(checkstyleTest) {
+	group = 'Verification'
+	description = 'Run checkstyle on all test Java sources'
+}
+
+test.dependsOn('checkstyleMain', 'checkstyleTest')
