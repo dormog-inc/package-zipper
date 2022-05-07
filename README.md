@@ -1,8 +1,9 @@
-<img align="right" width="290" height="290" src="assets/logo1.svg">
+<img align="right" width="130" height="130" src="assets/logo1.svg">
 
 
-# Package Zipper - Simple Online Packages Downloader
+# Package Zipper
 
+A simple online packages dwnloader.
 package-zipper is a java project for downloading and streaming java packages and there dependencies as zip files from maven repository.
 this project depends on [zipstreamer](https://github.com/scosman/zipstreamer) for streaming all the package dependencies into a zip file.
 
