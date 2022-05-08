@@ -3,7 +3,7 @@ package com.dor.package_zipper.controller;
 import java.util.List;
 
 import com.dor.package_zipper.configuration.AppConfig;
-import com.dor.package_zipper.exceptions.ArtifactNameIncludesToManyColons;
+import com.dor.package_zipper.exceptions.ArtifactNameIncludesTooManyColonsException;
 import com.dor.package_zipper.models.Artifact;
 import com.dor.package_zipper.models.ZipRemoteEntry;
 import com.dor.package_zipper.models.ZipStreamerBody;
@@ -125,7 +125,12 @@ public class PackageZipperController {
     @GetMapping(value = "/zip/stream/{artifact}")
     public ResponseEntity<StreamingResponseBody> getStreamArtifactZip(@PathVariable String artifact,
                                                                       @RequestParam(defaultValue = "true") boolean transitivity) {
-        Artifact artifactObj = new Artifact(artifact);
+        Artifact artifactObj = null;
+        try {
+            artifactObj = new Artifact(artifact);
+        } catch (ArtifactNameIncludesTooManyColonsException e) {
+            e.printStackTrace();
+        }
 
         return StreamZippedArtifact(artifactObj, transitivity);
     }

@@ -1,5 +1,6 @@
 package com.dor.package_zipper.models;
 
+import com.dor.package_zipper.exceptions.ArtifactNameIncludesTooManyColonsException;
 import lombok.*;
 
 import java.io.Serializable;
@@ -20,10 +21,10 @@ public class Artifact implements Serializable {
     private String packagingType = "jar";
     private String classifier;
 
-    public Artifact(String fullNameArtifact) throws ArtifactNameIncludesToManyColons {
+    public Artifact(String fullNameArtifact) throws ArtifactNameIncludesTooManyColonsException {
         String[] split = fullNameArtifact.split(":");
         if (split.length < 3) {
-            throw new ArtifactNameIncludesToManyColons("The artifact name should have format: groupId:artifactId:version");
+            throw new ArtifactNameIncludesTooManyColonsException("The artifact name should have format: groupId:artifactId:version");
         }
         this.groupId = split[0];
         this.artifactId = split[1];

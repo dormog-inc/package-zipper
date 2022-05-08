@@ -10,7 +10,7 @@ plugins {
 
 group = 'com.dor'
 version = '0.0.1-SNAPSHOT'
-sourceCompatibility = '8'
+sourceCompatibility = 1.9
 
 configurations {
 	compileOnly {
@@ -78,3 +78,4 @@ configure(checkstyleTest) {
 }
 
 test.dependsOn('checkstyleMain', 'checkstyleTest')
+targetCompatibility = JavaVersion.VERSION_1_9
