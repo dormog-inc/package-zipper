@@ -1,4 +1,4 @@
-<img align="right" width="130" height="130" src="assets/logo1.svg">
+<img align="right" width="290" height="290" src="assets/logo1.svg">
 
 
 # Package Zipper
