@@ -30,7 +30,7 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
 
-@RestController
+@RestController("/")
 @Slf4j
 @AllArgsConstructor
 public class PackageZipperController {

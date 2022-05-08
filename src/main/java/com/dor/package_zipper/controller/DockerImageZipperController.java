@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.reactive.function.client.ClientRequest;
+import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import reactor.core.publisher.Mono;
@@ -21,14 +22,14 @@ import reactor.core.publisher.Mono;
 import java.net.URI;
 import java.util.Map;
 
-@RestController
+@RestController("/docker")
 @Slf4j
 @AllArgsConstructor
 public class DockerImageZipperController {
     private final AppConfig appConfig;
     private final DockerClient dockerClient;
 
-    @PostMapping("/zip/stream")
+    @PostMapping("/zip/docker-stream")
     public ResponseEntity<StreamingResponseBody> StreamDockerImageTar(@RequestBody String image) {
         return null;
     }
@@ -58,7 +59,7 @@ public class DockerImageZipperController {
     }
 
     // Get Docker token (this function is useless for unauthenticated registries like Microsoft)
-    public Mono<Mono<Map<String, String>>> getAuthHead(ImageDetails imageDetails, String type) {
+    public Mono<Map<String, String>> getAuthHead(ImageDetails imageDetails, String type) {
 //        ClientRequest request = ClientRequest.create(HttpMethod.GET, url).build();
         return getDockerAuthenticationEndpoint(imageDetails)
                 .flatMap(uri -> WebClient.create(imageDetails.getRegistryUrl())
@@ -70,11 +71,29 @@ public class DockerImageZipperController {
                                             try {
                                                 final ObjectNode node = new ObjectMapper().readValue(body, ObjectNode.class);
                                                 String accessToken = node.get("token").asText();
-                                                return Mono.just(Map.of("Authorization", "Bearer " + accessToken, "Accept", type));
+                                                return Map.of("Authorization", "Bearer " + accessToken, "Accept", type);
                                             } catch (JsonProcessingException e) {
                                                 e.printStackTrace();
-                                                return Mono.empty();
+                                                return Map.of();
                                             }
                                         })));
+    }
+
+    // Fetch manifest v2 and get image layer digests
+    public Mono<ClientResponse> fetchManifest(ImageDetails imageDetails) {
+        return getAuthHead(imageDetails, "application/vnd.docker.distribution.manifest.v2+json")
+                .flatMap(map -> WebClient.create(String.format("https://%s/v2/%s/manifests/%s", imageDetails.getRegistryUrl(),
+                                imageDetails.getRepository(),
+                                imageDetails.getTag())).get()
+                        .header("Authorization", map.get("Authorization"))
+                        .header("Accept", map.get("Accept"))
+                        .exchangeToMono(clientResponse -> {
+                            if (clientResponse.statusCode().value() != 200) {
+                                // TODO: we can add here a fallback call to fetch manifests by tag (with @digest)
+                                return Mono.error(new ManifestsCouldNotBeFetchedException("[-] Cannot fetch manifest"));
+                            } else {
+                                return Mono.just(clientResponse);
+                            }
+                        }));
     }
 }
