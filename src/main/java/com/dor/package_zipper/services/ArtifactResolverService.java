@@ -5,19 +5,30 @@ import com.dor.package_zipper.models.Artifact;
 import com.dor.package_zipper.models.ZipRemoteEntry;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolvedArtifact;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolverSystem;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenStrategyStage;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.reactive.function.client.WebClient;
+import org.w3c.dom.Document;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
+import java.io.IOException;
+import java.io.StringReader;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 @Service
 @AllArgsConstructor
@@ -46,7 +57,8 @@ public class ArtifactResolverService {
     public List<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean withTransitivity) {
         List<ZipRemoteEntry> zipRemoteEntries = null;
         Path path = Paths.get(
-                pomFile.getOriginalFilename().replace(".pom", "") + "_" + System.currentTimeMillis() / 1000L + "_pom.xml");
+                pomFile.getOriginalFilename().replace(".pom", "") + "_" + System.currentTimeMillis() / 1000L
+                        + "_pom.xml");
         try {
             pomFile.transferTo(path);
             MavenResolverSystem mavenResolverSystem = Maven.resolver();
@@ -63,7 +75,7 @@ public class ArtifactResolverService {
     }
 
     private List<ZipRemoteEntry> resolveMavenStrategy(boolean withTransitivity,
-                                                      MavenStrategyStage mavenStrategyStage) {
+            MavenStrategyStage mavenStrategyStage) {
         List<MavenResolvedArtifact> mavenArtifacts = new ArrayList<MavenResolvedArtifact>();
         if (withTransitivity) {
             mavenArtifacts.addAll(mavenStrategyStage
@@ -72,15 +84,19 @@ public class ArtifactResolverService {
             mavenArtifacts.addAll(mavenStrategyStage
                     .withoutTransitivity().asList(MavenResolvedArtifact.class));
         }
-
-        return mavenArtifacts.stream().map(mavenArtifact -> Arrays.stream(mavenArtifact.getDependencies()).map(dependency -> getRemoteEntryFromLibrary(
+        //TODO remove duplicates (see artifact in example txt for example (shrinkwrap-resolver-parent-3.1.4.pom))
+        return mavenArtifacts.stream()
+                .map(mavenArtifact -> Arrays
+                        .stream(mavenArtifact.getDependencies()).map(dependency -> getRemoteEntryFromLibrary(
                                 new Artifact(
                                         dependency.getCoordinate().getGroupId(),
                                         dependency.getCoordinate().getArtifactId(),
                                         dependency.getCoordinate().getVersion())))
                         .flatMap(List::stream)
+                        .distinct()
                         .collect(Collectors.toList()))
                 .flatMap(List::stream)
+                .distinct()
                 .collect(Collectors.toList());
     }
 
@@ -93,10 +109,50 @@ public class ArtifactResolverService {
                 artifact.getArtifactId(),
                 artifact.getVersion());
         String libPath = String.format("%s.%s", path, artifact.getPackagingType());
-        String pomPath = String.format("%s.%s", path, "pom");
         zipEntries.add(new ZipRemoteEntry(libPath, String.format("%s/%s", appConfig.getMavenUrl(), libPath)));
-        zipEntries.add(new ZipRemoteEntry(pomPath, String.format("%s/%s", appConfig.getMavenUrl(), pomPath)));
+        if (!artifact.getPackagingType().equals("pom")) {
+            String pomPath = String.format("%s.%s", path, "pom");
+            String pomUrl = String.format("%s/%s", appConfig.getMavenUrl(), pomPath);
+            zipEntries.add(new ZipRemoteEntry(pomPath, pomUrl));
+            List<ZipRemoteEntry> pomEntries = getParentPomEntries(pomUrl);
+            if (pomEntries != null) {
+                zipEntries.addAll(pomEntries);
+            }
+        }
         return zipEntries;
+    }
+
+    private List<ZipRemoteEntry> getParentPomEntries(String pomUrl) {
+        return WebClient.create(pomUrl).get().retrieve().bodyToMono(String.class)
+                .filter(pomStirng -> {
+                    return pomStirng.contains("<parent>");
+                })
+                .map(this::loadXMLFromString)
+                .map(doc -> {
+                    Artifact parent = new Artifact(doc.getElementsByTagName("groupId").item(0).getTextContent(),
+                            doc.getElementsByTagName("artifactId").item(0).getTextContent(),
+                            doc.getElementsByTagName("version").item(0).getTextContent());
+                    parent.setPackagingType("pom");
+                    return parent;
+                })
+                .map(artifact -> getRemoteEntryFromLibrary(artifact))
+                .block();
+    }
+
+    private Document loadXMLFromString(String xml) {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder builder;
+        Document document = null;
+        try {
+            builder = factory.newDocumentBuilder();
+            InputSource is = new InputSource(new StringReader(xml));
+            document = builder.parse(is);
+        } catch (ParserConfigurationException | SAXException | IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            throw new RuntimeException(e);
+        }
+        return document;
     }
 
 }
