@@ -1,6 +1,8 @@
 package com.dor.package_zipper.controller;
 
 import java.util.List;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import com.dor.package_zipper.configuration.AppConfig;
 import com.dor.package_zipper.models.Artifact;
@@ -28,6 +30,7 @@ import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBo
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @RestController
 @Slf4j
@@ -121,13 +124,14 @@ public class PackageZipperController {
             .body(stream);
     }
 
-    private Flux<DataBuffer> getZipStream(List<ZipRemoteEntry> zipRemoteEntries) {
-        log.info("Artifacts to package: {}", zipRemoteEntries);
-        ZipStreamerBody body = new ZipStreamerBody(zipRemoteEntries);
-        log.info("zip streamer request body: {}", new Gson().toJson(body));
+    private Flux<DataBuffer> getZipStream(Flux<ZipRemoteEntry> zipRemoteEntries) {
+        Mono<ZipStreamerBody> body = zipRemoteEntries.collectList().map( list ->{
+            return new ZipStreamerBody(list.stream().distinct().collect(Collectors.toList()));
+        } );
+        body.doOnNext( a -> log.info("zip streamer request body: {}", new Gson().toJson(a)));
         return WebClient.create(appConfig.getStreamZipperUrl())
             .post().uri("/download")
-            .body(BodyInserters.fromValue(body))
+            .body(BodyInserters.fromProducer(body, ZipRemoteEntry.class))
             .accept(MediaType.APPLICATION_OCTET_STREAM)
             .retrieve()
             .bodyToFlux(DataBuffer.class);

@@ -20,6 +20,10 @@ public class Artifact implements Serializable {
     private String packagingType = "jar";
     private String classifier;
 
+    public String getPackagingType() {
+        return this.packagingType == null ? "jar" : this.packagingType;
+    }
+
     public Artifact(String fullNameArtifact) {
         String[] split = fullNameArtifact.split(":");
         if (split.length < 3) {

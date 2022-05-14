@@ -5,8 +5,11 @@ import com.dor.package_zipper.models.Artifact;
 import com.dor.package_zipper.models.ZipRemoteEntry;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import org.jboss.shrinkwrap.resolver.api.maven.Maven;
+import org.jboss.shrinkwrap.resolver.api.maven.MavenArtifactInfo;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolvedArtifact;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolverSystem;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenStrategyStage;
@@ -36,26 +39,24 @@ import javax.xml.parsers.ParserConfigurationException;
 public class ArtifactResolverService {
     private final AppConfig appConfig;
 
-    public List<ZipRemoteEntry> resolveArtifact(Artifact artifact, boolean withTransitivity) {
+    public Flux<ZipRemoteEntry> resolveArtifact(Artifact artifact, boolean withTransitivity) {
         MavenStrategyStage mavenStrategyStage = Maven.resolver().resolve(artifact.getArtifactFullName());
-        List<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
-        zipRemoteEntries.addAll(getRemoteEntryFromLibrary(artifact));
-        return zipRemoteEntries;
+        Flux<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
+        return Flux.concat(zipRemoteEntries, getRemoteEntryFromLibrary(artifact)).distinct();
     }
 
-    public List<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, boolean withTransitivity) {
+    public Flux<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, boolean withTransitivity) {
         MavenResolverSystem mavenResolverSystem = Maven.resolver();
         MavenStrategyStage mavenStrategyStage = mavenResolverSystem.resolve(
                 artifacts.stream().map(Artifact::getArtifactFullName).collect(Collectors.toList()));
-        List<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
-        artifacts.forEach(artifact -> {
-            zipRemoteEntries.addAll(getRemoteEntryFromLibrary(artifact));
-        });
-        return zipRemoteEntries;
+        return Flux.concat(
+            resolveMavenStrategy(withTransitivity, mavenStrategyStage),
+            Flux.fromIterable(artifacts).map(artifact -> getRemoteEntryFromLibrary(artifact)).flatMap(a -> a)
+        ).distinct();
     }
 
-    public List<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean withTransitivity) {
-        List<ZipRemoteEntry> zipRemoteEntries = null;
+    public Flux<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean withTransitivity) {
+        Flux<ZipRemoteEntry> zipRemoteEntries = null;
         Path path = Paths.get(
                 pomFile.getOriginalFilename().replace(".pom", "") + "_" + System.currentTimeMillis() / 1000L
                         + "_pom.xml");
@@ -74,7 +75,7 @@ public class ArtifactResolverService {
         return zipRemoteEntries;
     }
 
-    private List<ZipRemoteEntry> resolveMavenStrategy(boolean withTransitivity,
+    private Flux<ZipRemoteEntry> resolveMavenStrategy(boolean withTransitivity,
             MavenStrategyStage mavenStrategyStage) {
         List<MavenResolvedArtifact> mavenArtifacts = new ArrayList<MavenResolvedArtifact>();
         if (withTransitivity) {
@@ -84,23 +85,20 @@ public class ArtifactResolverService {
             mavenArtifacts.addAll(mavenStrategyStage
                     .withoutTransitivity().asList(MavenResolvedArtifact.class));
         }
-        //TODO remove duplicates (see artifact in example txt for example (shrinkwrap-resolver-parent-3.1.4.pom))
-        return mavenArtifacts.stream()
-                .map(mavenArtifact -> Arrays
-                        .stream(mavenArtifact.getDependencies()).map(dependency -> getRemoteEntryFromLibrary(
+
+        return Flux.fromIterable(mavenArtifacts)
+                .map(mavenArtifact -> Flux.fromArray(mavenArtifact.getDependencies())
+                        .map(dependency -> getRemoteEntryFromLibrary(
                                 new Artifact(
                                         dependency.getCoordinate().getGroupId(),
                                         dependency.getCoordinate().getArtifactId(),
-                                        dependency.getCoordinate().getVersion())))
-                        .flatMap(List::stream)
-                        .distinct()
-                        .collect(Collectors.toList()))
-                .flatMap(List::stream)
-                .distinct()
-                .collect(Collectors.toList());
+                                        dependency.getCoordinate().getVersion()))
+                            ).flatMap(a -> a).distinct()
+                    ).flatMap(a -> a).distinct();
     }
 
-    private List<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact) {
+    private Flux<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact) {
+        Flux<ZipRemoteEntry> zipEntriesFlux = null;
         List<ZipRemoteEntry> zipEntries = new ArrayList<>();
         String path = String.format("%s/%s/%s/%s-%s",
                 artifact.getGroupId().replace(".", "/"),
@@ -109,20 +107,24 @@ public class ArtifactResolverService {
                 artifact.getArtifactId(),
                 artifact.getVersion());
         String libPath = String.format("%s.%s", path, artifact.getPackagingType());
-        zipEntries.add(new ZipRemoteEntry(libPath, String.format("%s/%s", appConfig.getMavenUrl(), libPath)));
+        String libUrl = String.format("%s/%s", appConfig.getMavenUrl(), libPath);
+        String pomUrl = libUrl;
+        zipEntries.add(new ZipRemoteEntry(libPath, libUrl));
+
         if (!artifact.getPackagingType().equals("pom")) {
             String pomPath = String.format("%s.%s", path, "pom");
-            String pomUrl = String.format("%s/%s", appConfig.getMavenUrl(), pomPath);
+            pomUrl = String.format("%s/%s", appConfig.getMavenUrl(), pomPath);
             zipEntries.add(new ZipRemoteEntry(pomPath, pomUrl));
-            List<ZipRemoteEntry> pomEntries = getParentPomEntries(pomUrl);
-            if (pomEntries != null) {
-                zipEntries.addAll(pomEntries);
-            }
         }
-        return zipEntries;
+
+        Flux<ZipRemoteEntry> pomEntries = getParentPomEntries(pomUrl);
+        if (pomEntries != null) {
+            zipEntriesFlux = Flux.concat(pomEntries, Flux.fromIterable(zipEntries)).distinct();
+        }
+        return zipEntriesFlux.distinct();
     }
 
-    private List<ZipRemoteEntry> getParentPomEntries(String pomUrl) {
+    private Flux<ZipRemoteEntry> getParentPomEntries(String pomUrl) {
         return WebClient.create(pomUrl).get().retrieve().bodyToMono(String.class)
                 .filter(pomStirng -> {
                     return pomStirng.contains("<parent>");
@@ -135,8 +137,7 @@ public class ArtifactResolverService {
                     parent.setPackagingType("pom");
                     return parent;
                 })
-                .map(artifact -> getRemoteEntryFromLibrary(artifact))
-                .block();
+                .map(artifact -> Flux.concat(getRemoteEntryFromLibrary(artifact), resolveArtifact(artifact, true).distinct())).flux().flatMap(a -> a).distinct();
     }
 
     private Document loadXMLFromString(String xml) {
