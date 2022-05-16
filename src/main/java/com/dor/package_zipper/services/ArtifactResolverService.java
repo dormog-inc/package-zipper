@@ -13,6 +13,7 @@ import org.jboss.shrinkwrap.resolver.api.maven.MavenArtifactInfo;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolvedArtifact;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenResolverSystem;
 import org.jboss.shrinkwrap.resolver.api.maven.MavenStrategyStage;
+import org.jboss.shrinkwrap.resolver.api.maven.ScopeType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -32,6 +33,11 @@ import java.util.stream.Collectors;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpression;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
 @Service
 @AllArgsConstructor
@@ -50,9 +56,9 @@ public class ArtifactResolverService {
         MavenStrategyStage mavenStrategyStage = mavenResolverSystem.resolve(
                 artifacts.stream().map(Artifact::getArtifactFullName).collect(Collectors.toList()));
         return Flux.concat(
-            resolveMavenStrategy(withTransitivity, mavenStrategyStage),
-            Flux.fromIterable(artifacts).map(artifact -> getRemoteEntryFromLibrary(artifact)).flatMap(a -> a)
-        ).distinct();
+                resolveMavenStrategy(withTransitivity, mavenStrategyStage),
+                Flux.fromIterable(artifacts).map(artifact -> getRemoteEntryFromLibrary(artifact)).flatMap(a -> a))
+                .distinct();
     }
 
     public Flux<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean withTransitivity) {
@@ -65,6 +71,7 @@ public class ArtifactResolverService {
             MavenResolverSystem mavenResolverSystem = Maven.resolver();
             MavenStrategyStage mavenStrategyStage = mavenResolverSystem.loadPomFromFile(path.toFile())
                     .importCompileAndRuntimeDependencies()
+                    .importDependencies(ScopeType.IMPORT)
                     .importTestDependencies().resolve();
             zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
         } catch (Exception e) {
@@ -92,9 +99,9 @@ public class ArtifactResolverService {
                                 new Artifact(
                                         dependency.getCoordinate().getGroupId(),
                                         dependency.getCoordinate().getArtifactId(),
-                                        dependency.getCoordinate().getVersion()))
-                            ).flatMap(a -> a).distinct()
-                    ).flatMap(a -> a).distinct();
+                                        dependency.getCoordinate().getVersion())))
+                        .flatMap(a -> a).distinct())
+                .flatMap(a -> a).distinct();
     }
 
     private Flux<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact) {
@@ -130,14 +137,42 @@ public class ArtifactResolverService {
                     return pomStirng.contains("<parent>");
                 })
                 .map(this::loadXMLFromString)
+                .filter(doc -> {
+                    XPathFactory xPathfactory = XPathFactory.newInstance();
+                    XPath xpath = xPathfactory.newXPath();
+                    XPathExpression expr;
+                    String artifactId = "";
+                    try {
+                        expr = xpath.compile("/project/parent/artifactId/text()");
+                        artifactId = expr.evaluate(doc, XPathConstants.STRING).toString();
+                    } catch (XPathExpressionException e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+                    return !artifactId.equals("");
+                })
                 .map(doc -> {
-                    Artifact parent = new Artifact(doc.getElementsByTagName("groupId").item(0).getTextContent(),
-                            doc.getElementsByTagName("artifactId").item(0).getTextContent(),
-                            doc.getElementsByTagName("version").item(0).getTextContent());
+                    List<String> a = List.of("groupId", "artifactId", "version");
+                    List<String> b = new ArrayList<>();
+                    for(int i = 0; i< a.size(); i++) {
+                        XPathFactory xPathfactory = XPathFactory.newInstance();
+                        XPath xpath = xPathfactory.newXPath();
+                        XPathExpression expr;
+                        try {
+                            String bla = pomUrl;
+                            expr = xpath.compile(String.format("/project/parent/%s/text()", a.get(i)));
+                            b.add(expr.evaluate(doc, XPathConstants.STRING).toString());
+                        } catch (Exception e) {
+                            // TODO Auto-generated catch block
+                            e.printStackTrace();
+                        }
+                    }          
+
+                    Artifact parent = new Artifact(b.get(0), b.get(1), b.get(2));
                     parent.setPackagingType("pom");
                     return parent;
                 })
-                .map(artifact -> Flux.concat(getRemoteEntryFromLibrary(artifact), resolveArtifact(artifact, true).distinct())).flux().flatMap(a -> a).distinct();
+                .map(artifact -> getRemoteEntryFromLibrary(artifact)).flux().flatMap(a -> a).distinct();
     }
 
     private Document loadXMLFromString(String xml) {
