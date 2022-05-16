@@ -152,7 +152,7 @@ public class ArtifactResolverService {
                     return !artifactId.equals("");
                 })
                 .map(doc -> {
-                    List<String> a = List.of("groupId", "artifactId", "version");
+                    List<String> a = Arrays.asList("groupId", "artifactId", "version");
                     List<String> b = new ArrayList<>();
                     for(int i = 0; i< a.size(); i++) {
                         XPathFactory xPathfactory = XPathFactory.newInstance();
