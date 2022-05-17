@@ -45,49 +45,49 @@ public class PackageZipperController {
         return StreamZippedArtifact(artifact, transitivity);
     }
 
-    @PostMapping("/zip/stream/multi")
-    public ResponseEntity<StreamingResponseBody> StreamArtifactsZip(@RequestBody List<Artifact> artifacts,
-                                                                    @RequestParam(defaultValue = "true") boolean transitivity) {
-        final Flux<DataBuffer> dataBufferFlux = getZipStream(
-            artifactResolverService.resolveArtifacts(artifacts, transitivity));
-        StreamingResponseBody stream = output -> DataBufferUtils
-            .write(dataBufferFlux,
-                output)
-            .doOnError(e -> log.error("Error writing to stream", e))
-            .doOnComplete(() -> log.info("Streaming artifact zip complete artifact: {}",
-                artifacts))
-            .blockLast();
-        // TODO mabye need use DataBufferUtils.releaseConsumer()
-        return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION,
-                "attachment; filename=multi.zip")
-            .contentType(MediaType.APPLICATION_OCTET_STREAM)
-            .body(stream);
+//    @PostMapping("/zip/stream/multi")
+//    public ResponseEntity<StreamingResponseBody> StreamArtifactsZip(@RequestBody List<Artifact> artifacts,
+//                                                                    @RequestParam(defaultValue = "true") boolean transitivity) {
+//        final Flux<DataBuffer> dataBufferFlux = getZipStream(
+//            artifactResolverService.resolveArtifacts(artifacts, transitivity));
+//        StreamingResponseBody stream = output -> DataBufferUtils
+//            .write(dataBufferFlux,
+//                output)
+//            .doOnError(e -> log.error("Error writing to stream", e))
+//            .doOnComplete(() -> log.info("Streaming artifact zip complete artifact: {}",
+//                artifacts))
+//            .blockLast();
+//        // TODO maybe need use DataBufferUtils.releaseConsumer()
+//        return ResponseEntity.ok()
+//            .header(HttpHeaders.CONTENT_DISPOSITION,
+//                "attachment; filename=multi.zip")
+//            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+//            .body(stream);
+//
+//    }
 
-    }
-
-    @PostMapping(value = "/zip/stream/pom", consumes = {
-        "multipart/form-data"
-    })
-    public ResponseEntity<StreamingResponseBody> getPOMArtifactsZip(@RequestParam("file") MultipartFile pomFile,
-                                                                    @RequestParam(defaultValue = "true", name = "transitivity") boolean transitivity) {
-        final Flux<DataBuffer> dataBufferFlux = getZipStream(
-            artifactResolverService.resolveArtifactFromPom(pomFile, transitivity));
-        StreamingResponseBody stream = output -> DataBufferUtils
-            .write(dataBufferFlux,
-                output)
-            .doOnError(e -> log.error("Error writing to stream", e))
-            .doOnComplete(() -> log.info("Streaming pom artifact zip complete artifact: {}",
-                pomFile.getOriginalFilename()))
-            .blockLast();
-        // TODO mabye need use DataBufferUtils.releaseConsumer()
-        return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION,
-                "attachment; filename=" + pomFile.getOriginalFilename().replace(".pom", "") + ".zip")
-            .contentType(MediaType.APPLICATION_OCTET_STREAM)
-            .body(stream);
-
-    }
+//    @PostMapping(value = "/zip/stream/pom", consumes = {
+//        "multipart/form-data"
+//    })
+//    public ResponseEntity<StreamingResponseBody> getPOMArtifactsZip(@RequestParam("file") MultipartFile pomFile,
+//                                                                    @RequestParam(defaultValue = "true", name = "transitivity") boolean transitivity) {
+//        final Flux<DataBuffer> dataBufferFlux = getZipStream(
+//            artifactResolverService.resolveArtifactFromPom(pomFile, transitivity));
+//        StreamingResponseBody stream = output -> DataBufferUtils
+//            .write(dataBufferFlux,
+//                output)
+//            .doOnError(e -> log.error("Error writing to stream", e))
+//            .doOnComplete(() -> log.info("Streaming pom artifact zip complete artifact: {}",
+//                pomFile.getOriginalFilename()))
+//            .blockLast();
+//        // TODO maybe need use DataBufferUtils.releaseConsumer()
+//        return ResponseEntity.ok()
+//            .header(HttpHeaders.CONTENT_DISPOSITION,
+//                "attachment; filename=" + pomFile.getOriginalFilename().replace(".pom", "") + ".zip")
+//            .contentType(MediaType.APPLICATION_OCTET_STREAM)
+//            .body(stream);
+//
+//    }
 
     @GetMapping(value = "/zip/stream")
     public ResponseEntity<StreamingResponseBody> getStreamArtifactZip(@RequestParam String groupId,
@@ -116,7 +116,7 @@ public class PackageZipperController {
             .doOnComplete(() -> log.info("Streaming artifact zip complete artifact: {}",
                 artifact.getArtifactFullName()))
             .blockLast();
-        // TODO mabye need use DataBufferUtils.releaseConsumer()
+        // TODO maybe need use DataBufferUtils.releaseConsumer()
         return ResponseEntity.ok()
             .header(HttpHeaders.CONTENT_DISPOSITION,
                 "attachment; filename=" + artifact.getArtifactFullName() + ".zip")

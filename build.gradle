@@ -38,6 +38,7 @@ dependencies {
 	implementation 'org.apache.maven.resolver:maven-resolver:1.8.0'
 
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-api-maven:3.1.4'
+	implementation 'com.google.inject:guice:5.1.0'
 
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'

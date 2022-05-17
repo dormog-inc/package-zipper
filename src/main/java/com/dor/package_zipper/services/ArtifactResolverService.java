@@ -1,10 +1,25 @@
 package com.dor.package_zipper.services;
 
 import com.dor.package_zipper.configuration.AppConfig;
+import com.dor.package_zipper.maven.resolver.Booter;
+import com.dor.package_zipper.maven.resolver.ConsoleDependencyGraphDumper;
 import com.dor.package_zipper.models.Artifact;
 import com.dor.package_zipper.models.ZipRemoteEntry;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.eclipse.aether.DefaultRepositorySystemSession;
+import org.eclipse.aether.RepositorySystem;
+import org.eclipse.aether.artifact.DefaultArtifact;
+import org.eclipse.aether.collection.CollectRequest;
+import org.eclipse.aether.collection.CollectResult;
+import org.eclipse.aether.collection.DependencyCollectionException;
+import org.eclipse.aether.graph.Dependency;
+import org.eclipse.aether.graph.DependencyFilter;
+import org.eclipse.aether.resolution.*;
+import org.eclipse.aether.util.artifact.JavaScopes;
+import org.eclipse.aether.util.filter.DependencyFilterUtils;
+import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
+import org.eclipse.aether.util.graph.transformer.ConflictResolver;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -47,61 +62,82 @@ public class ArtifactResolverService {
 
     public Flux<ZipRemoteEntry> resolveArtifact(Artifact artifact, boolean withTransitivity) {
         MavenStrategyStage mavenStrategyStage = Maven.resolver().resolve(artifact.getArtifactFullName());
-        Flux<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
+        Flux<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(artifact);
         return Flux.concat(zipRemoteEntries, getRemoteEntryFromLibrary(artifact)).distinct();
     }
 
-    public Flux<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, boolean withTransitivity) {
-        MavenResolverSystem mavenResolverSystem = Maven.resolver();
-        MavenStrategyStage mavenStrategyStage = mavenResolverSystem.resolve(
-                artifacts.stream().map(Artifact::getArtifactFullName).collect(Collectors.toList()));
-        return Flux.concat(
-                resolveMavenStrategy(withTransitivity, mavenStrategyStage),
-                Flux.fromIterable(artifacts).map(artifact -> getRemoteEntryFromLibrary(artifact)).flatMap(a -> a))
-                .distinct();
-    }
+//    public Flux<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, boolean withTransitivity) {
+//        MavenResolverSystem mavenResolverSystem = Maven.resolver();
+//        MavenStrategyStage mavenStrategyStage = mavenResolverSystem.resolve(
+//                artifacts.stream().map(Artifact::getArtifactFullName).collect(Collectors.toList()));
+//        return Flux.concat(
+//                resolveMavenStrategy(mavenStrategyStage),
+//                Flux.fromIterable(artifacts).map(artifact -> getRemoteEntryFromLibrary(artifact)).flatMap(a -> a))
+//                .distinct();
+//    }
 
-    public Flux<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean withTransitivity) {
-        Flux<ZipRemoteEntry> zipRemoteEntries = null;
-        Path path = Paths.get(
-                pomFile.getOriginalFilename().replace(".pom", "") + "_" + System.currentTimeMillis() / 1000L
-                        + "_pom.xml");
+//    public Flux<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean withTransitivity) {
+//        Flux<ZipRemoteEntry> zipRemoteEntries = null;
+//        Path path = Paths.get(
+//                pomFile.getOriginalFilename().replace(".pom", "") + "_" + System.currentTimeMillis() / 1000L
+//                        + "_pom.xml");
+//        try {
+//            pomFile.transferTo(path);
+//            MavenResolverSystem mavenResolverSystem = Maven.resolver();
+//            MavenStrategyStage mavenStrategyStage = mavenResolverSystem.loadPomFromFile(path.toFile())
+//                    .importCompileAndRuntimeDependencies()
+//                    .importDependencies(ScopeType.IMPORT)
+//                    .importTestDependencies().resolve();
+//            zipRemoteEntries = resolveMavenStrategy(mavenStrategyStage);
+////            TODO: return this option:
+////            zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
+//        } catch (Exception e) {
+//            log.error("error create tmp pom file", e);
+//        } finally {
+//            path.toFile().delete();
+//        }
+//        return zipRemoteEntries;
+//    }
+
+    private Flux<ZipRemoteEntry> resolveMavenStrategy(Artifact artifactOriginal) {
         try {
-            pomFile.transferTo(path);
-            MavenResolverSystem mavenResolverSystem = Maven.resolver();
-            MavenStrategyStage mavenStrategyStage = mavenResolverSystem.loadPomFromFile(path.toFile())
-                    .importCompileAndRuntimeDependencies()
-                    .importDependencies(ScopeType.IMPORT)
-                    .importTestDependencies().resolve();
-            zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
-        } catch (Exception e) {
-            log.error("error create tmp pom file", e);
-        } finally {
-            path.toFile().delete();
-        }
-        return zipRemoteEntries;
-    }
 
-    private Flux<ZipRemoteEntry> resolveMavenStrategy(boolean withTransitivity,
-            MavenStrategyStage mavenStrategyStage) {
-        List<MavenResolvedArtifact> mavenArtifacts = new ArrayList<MavenResolvedArtifact>();
-        if (withTransitivity) {
-            mavenArtifacts.addAll(mavenStrategyStage
-                    .withTransitivity().asList(MavenResolvedArtifact.class));
-        } else {
-            mavenArtifacts.addAll(mavenStrategyStage
-                    .withoutTransitivity().asList(MavenResolvedArtifact.class));
-        }
+        RepositorySystem system = Booter.newRepositorySystem( Booter.selectFactory(null) );
 
-        return Flux.fromIterable(mavenArtifacts)
-                .map(mavenArtifact -> Flux.fromArray(mavenArtifact.getDependencies())
-                        .map(dependency -> getRemoteEntryFromLibrary(
+        DefaultRepositorySystemSession session = Booter.newRepositorySystemSession( system );
+
+        session.setConfigProperty( ConflictResolver.CONFIG_PROP_VERBOSE, true );
+        session.setConfigProperty( DependencyManagerUtils.CONFIG_PROP_VERBOSE, true );
+
+        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact( artifactOriginal.toString() );
+
+        ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
+        descriptorRequest.setArtifact( artifact );
+        descriptorRequest.setRepositories( Booter.newRepositories( system, session ) );
+        ArtifactDescriptorResult descriptorResult = null;
+            descriptorResult = system.readArtifactDescriptor( session, descriptorRequest );
+
+        CollectRequest collectRequest = new CollectRequest();
+        collectRequest.setRootArtifact( descriptorResult.getArtifact() );
+        collectRequest.setDependencies( descriptorResult.getDependencies() );
+        collectRequest.setManagedDependencies( descriptorResult.getManagedDependencies() );
+        collectRequest.setRepositories( descriptorRequest.getRepositories() );
+
+        DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE, JavaScopes.PROVIDED);
+        DependencyRequest dependencyRequest = new DependencyRequest( collectRequest, classpathFilter );
+
+        List<ArtifactResult> collectResult = system.resolveDependencies( session, dependencyRequest ).getArtifactResults();
+        return Flux.fromIterable(collectResult)
+                .map(dependency -> getRemoteEntryFromLibrary(
                                 new Artifact(
-                                        dependency.getCoordinate().getGroupId(),
-                                        dependency.getCoordinate().getArtifactId(),
-                                        dependency.getCoordinate().getVersion())))
-                        .flatMap(a -> a).distinct())
-                .flatMap(a -> a).distinct();
+                                        dependency.getArtifact().getGroupId(),
+                                        dependency.getArtifact().getArtifactId(),
+                                        dependency.getArtifact().getVersion())))
+                        .flatMap(a -> a).distinct();
+        } catch (ArtifactDescriptorException | DependencyResolutionException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     private Flux<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact) {
