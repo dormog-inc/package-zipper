@@ -130,7 +130,7 @@ public class PackageZipperController {
         } );
         body.doOnNext( a -> log.info("zip streamer request body: {}", new Gson().toJson(a)));
         return WebClient.create(appConfig.getStreamZipperUrl())
-            .post().uri("/download")
+            .post().uri("/download_zip")
             .body(BodyInserters.fromProducer(body, ZipRemoteEntry.class))
             .accept(MediaType.APPLICATION_OCTET_STREAM)
             .retrieve()
