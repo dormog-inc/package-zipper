@@ -1,4 +1,4 @@
-package com.dor.package_zipper.maven.resolver;/*
+package com.dor.package_zipper.maven.resolver.sisu;/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information

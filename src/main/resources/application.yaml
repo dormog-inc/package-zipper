@@ -11,4 +11,4 @@ spring:
       request-timeout: -1
 package-zipper:
     maven-url: "https://repo1.maven.org/maven2"
-    stream-zipper-url: "${ZIP_STREAMER:bla}"
+    stream-zipper-url: "${ZIP_STREAMER:https://localhost:4008}"

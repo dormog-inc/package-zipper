@@ -61,7 +61,7 @@ public class ArtifactResolverService {
     private final AppConfig appConfig;
 
     public Flux<ZipRemoteEntry> resolveArtifact(Artifact artifact, boolean withTransitivity) {
-        MavenStrategyStage mavenStrategyStage = Maven.resolver().resolve(artifact.getArtifactFullName());
+//        MavenStrategyStage mavenStrategyStage = Maven.resolver().resolve(artifact.getArtifactFullName());
         Flux<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(artifact);
         return Flux.concat(zipRemoteEntries, getRemoteEntryFromLibrary(artifact)).distinct();
     }
@@ -109,13 +109,14 @@ public class ArtifactResolverService {
         session.setConfigProperty( ConflictResolver.CONFIG_PROP_VERBOSE, true );
         session.setConfigProperty( DependencyManagerUtils.CONFIG_PROP_VERBOSE, true );
 
-        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact( artifactOriginal.toString() );
+//        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(
+//                artifactOriginal.getGroupId(), artifactOriginal.getArtifactId(),  null, artifactOriginal.getVersion());
+        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(artifactOriginal.getArtifactFullName());
 
         ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
         descriptorRequest.setArtifact( artifact );
         descriptorRequest.setRepositories( Booter.newRepositories( system, session ) );
-        ArtifactDescriptorResult descriptorResult = null;
-            descriptorResult = system.readArtifactDescriptor( session, descriptorRequest );
+        ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor( session, descriptorRequest );
 
         CollectRequest collectRequest = new CollectRequest();
         collectRequest.setRootArtifact( descriptorResult.getArtifact() );

@@ -4,6 +4,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+import com.dor.package_zipper.maven.resolver.guice.GuiceRepositorySystemFactory;
+import com.dor.package_zipper.maven.resolver.manual.ManualRepositorySystemFactory;
+import com.dor.package_zipper.maven.resolver.sisu.SisuRepositorySystemFactory;
 import org.apache.maven.repository.internal.MavenRepositorySystemUtils;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
@@ -39,11 +42,11 @@ public class Booter
         switch ( factory ) 
         {
             case SERVICE_LOCATOR:
-                return org.apache.maven.resolver.examples.manual.ManualRepositorySystemFactory.newRepositorySystem();
+                return ManualRepositorySystemFactory.newRepositorySystem();
             case GUICE:
-                return org.apache.maven.resolver.examples.guice.GuiceRepositorySystemFactory.newRepositorySystem();
+                return GuiceRepositorySystemFactory.newRepositorySystem();
             case SISU:
-                return org.apache.maven.resolver.examples.sisu.SisuRepositorySystemFactory.newRepositorySystem();
+                return SisuRepositorySystemFactory.newRepositorySystem();
             default:
                 throw new IllegalArgumentException( "Unknown factory: " + factory );
         }

@@ -1,4 +1,4 @@
-package com.dor.package_zipper.maven.resolver;
+package com.dor.package_zipper.maven.resolver.sisu;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -18,7 +18,6 @@ import org.eclipse.sisu.space.BeanScanning;
 @Named
 public class SisuRepositorySystemFactory
 {
-    @Inject
     private RepositorySystem repositorySystem;
 
     public static RepositorySystem newRepositorySystem()

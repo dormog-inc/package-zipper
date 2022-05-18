@@ -36,6 +36,22 @@ dependencies {
 	implementation 'org.springdoc:springdoc-openapi-webflux-ui:1.6.8'
 	implementation 'com.squareup.tools.build:maven-archeologist:0.0.3.1'
 	implementation 'org.apache.maven.resolver:maven-resolver:1.8.0'
+	implementation ("org.apache.maven.resolver:maven-resolver-impl") {
+		version {
+			strictly "1.8.0"
+		}
+	}
+	implementation ("org.apache.maven.resolver:maven-resolver-transport-wagon") {
+		version {
+			strictly "1.8.0"
+		}
+	}
+	implementation ("org.apache.maven.resolver:maven-resolver-connector-basic") {
+		version {
+			strictly "1.8.0"
+		}
+	}
+	implementation 'org.apache.maven.resolver:maven-resolver-transport-http:1.8.0'
 
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-api-maven:3.1.4'
 	implementation 'com.google.inject:guice:5.1.0'
