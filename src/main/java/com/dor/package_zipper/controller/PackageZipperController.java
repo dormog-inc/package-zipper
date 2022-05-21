@@ -75,6 +75,7 @@ public class PackageZipperController {
 
     }
 
+    // TODO: enable pom requests
 //    @PostMapping(value = "/zip/stream/pom", consumes = {
 //        "multipart/form-data"
 //    })

@@ -56,34 +56,7 @@ public class ArtifactResolverService {
         return Try.of(() -> {
             RepositorySystem system = Booter.newRepositorySystem();
             DefaultRepositorySystemSession session = new Booter().newRepositorySystemSession(system);
-
-            session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
-            session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
-
-            org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName());
-
-            ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
-            descriptorRequest.setArtifact(artifact);
-            descriptorRequest.setRepositories(Collections.singletonList(newCentralRepository));
-            // TODO: prevent this line from downloading jars locally:
-            ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor(session, descriptorRequest);
-
-            CollectRequest collectRequest = new CollectRequest();
-            collectRequest.setRootArtifact(descriptorResult.getArtifact());
-            collectRequest.setDependencies(descriptorResult.getDependencies());
-            collectRequest.setManagedDependencies(descriptorResult.getManagedDependencies());
-            collectRequest.setRepositories(descriptorRequest.getRepositories());
-
-            DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE,
-                    JavaScopes.RUNTIME,
-                    JavaScopes.TEST,
-                    JavaScopes.SYSTEM,
-                    JavaScopes.PROVIDED);
-            DependencyRequest dependencyRequest = new DependencyRequest(collectRequest, classpathFilter);
-
-            DependencyResult dependencyResult = system.resolveDependencies(session, dependencyRequest);
-            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = dependencyResult.getRequest().getCollectRequest().getManagedDependencies().stream().map(Dependency::getArtifact).collect(Collectors.toList());
-            managedArtifacts.add(singleArtifactResolving(system, session, artifact));
+            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsLists(originalArtifact, system, session);
             return Flux.fromIterable(managedArtifacts)
                     .flatMap(dependency -> getRemoteEntryFromLibrary(
                             new Artifact(
@@ -106,74 +79,6 @@ public class ArtifactResolverService {
         }
     }
 
-//    public Flux<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean thin) {
-//        Flux<ZipRemoteEntry> zipRemoteEntries = null;
-//        Path path = Paths.get(
-//                pomFile.getOriginalFilename().replace(".pom", "") + "_" + System.currentTimeMillis() / 1000L
-//                        + "_pom.xml");
-//        try {
-//            pomFile.transferTo(path);
-//            MavenResolverSystem mavenResolverSystem = Maven.resolver();
-//            MavenStrategyStage mavenStrategyStage = mavenResolverSystem.loadPomFromFile(path.toFile())
-//                    .importCompileAndRuntimeDependencies()
-//                    .importDependencies(ScopeType.IMPORT)
-//                    .importTestDependencies().resolve();
-//            zipRemoteEntries = resolveMavenStrategy(mavenStrategyStage);
-////            TODO: return this option:
-////            zipRemoteEntries = resolveMavenStrategy(withTransitivity, mavenStrategyStage);
-//        } catch (Exception e) {
-//            log.error("error create tmp pom file", e);
-//        } finally {
-//            path.toFile().delete();
-//        }
-//        return zipRemoteEntries;
-//    }
-//
-//    public MavenWorkingSessionz loadPomFromFile(File pomFile, Properties userProperties, String... profiles)
-//            throws IllegalArgumentException {
-//
-//        final DefaultModelBuildingRequest request = new DefaultModelBuildingRequest()
-//                .setSystemProperties(SecurityActions.getProperties()).setProfiles(this.getSettingsDefinedProfiles())
-//                .setPomFile(pomFile).setActiveProfileIds(SettingsXmlProfileSelector.explicitlyActivatedProfiles(profiles))
-//                .setInactiveProfileIds(SettingsXmlProfileSelector.explicitlyDisabledProfiles(profiles));
-//
-//        final DefaultModelBuildingRequest request = new DefaultArtifactDescriptorReader()
-//                .
-//                .setPomFile(pomFile).setActiveProfileIds(SettingsXmlProfileSelector.explicitlyActivatedProfiles(profiles))
-//                .setInactiveProfileIds(SettingsXmlProfileSelector.explicitlyDisabledProfiles(profiles));
-//
-//        if (userProperties != null){
-//            request.setUserProperties(userProperties);
-//        }
-//
-//        ModelBuilder builder = new DefaultModelBuilderFactory().newInstance();
-//        ModelBuildingResult result;
-//        try {
-//            request.setModelResolver(new MavenModelResolver(getSystem(), getSession(), getRemoteRepositories()));
-//            result = builder.build(request);
-//        }
-//        // wrap exception message
-//        catch (ModelBuildingException e) {
-//            String pomPath = request.getPomFile().getAbsolutePath();
-//            StringBuilder sb = new StringBuilder("Found ").append(e.getProblems().size())
-//                    .append(" problems while building POM model from ").append(pomPath).append("\n");
-//
-//            int counter = 1;
-//            for (ModelProblem problem : e.getProblems()) {
-//                sb.append(counter++).append("/ ").append(problem).append("\n");
-//            }
-//
-//            throw new IllegalArgumentException(sb.toString());
-//        }
-//
-//        // get and update model
-//        Model model = result.getEffectiveModel();
-//
-//
-//        model.getDependencies()
-//        return this;
-//    }
-
     private Flux<ZipRemoteEntry> completeResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
             RepositorySystem system = Booter.newRepositorySystem();
@@ -185,36 +90,8 @@ public class ArtifactResolverService {
                 eventsCrawlerRepositoryListener = new EventsCrawlerRepositoryListener();
             }
             DefaultRepositorySystemSession session = new Booter(eventsCrawlerRepositoryListener).newRepositorySystemSession(system);
-
-            session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
-            session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
-
-            org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName());
-
-
-            ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
-            descriptorRequest.setArtifact(artifact);
-            descriptorRequest.setRepositories(Collections.singletonList(newCentralRepository));
-            // TODO: prevent this line from downloading jars locally:
-            ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor(session, descriptorRequest);
-
-            CollectRequest collectRequest = new CollectRequest();
-            collectRequest.setRootArtifact(descriptorResult.getArtifact());
-            collectRequest.setDependencies(descriptorResult.getDependencies());
-            collectRequest.setManagedDependencies(descriptorResult.getManagedDependencies());
-            collectRequest.setRepositories(descriptorRequest.getRepositories());
-
-            DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE,
-                    JavaScopes.RUNTIME,
-                    JavaScopes.TEST,
-                    JavaScopes.SYSTEM,
-                    JavaScopes.PROVIDED);
-            DependencyRequest dependencyRequest = new DependencyRequest(collectRequest, classpathFilter);
-
-            DependencyResult dependencyResult = system.resolveDependencies(session, dependencyRequest);
-            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = dependencyResult.getRequest().getCollectRequest().getManagedDependencies().stream().map(Dependency::getArtifact).collect(Collectors.toList());
+            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsLists(originalArtifact, system, session);
             managedArtifacts.addAll(eventsCrawlerRepositoryListener.getAllDeps());
-            managedArtifacts.add(singleArtifactResolving(system, session, artifact));
             return Flux.fromIterable(managedArtifacts)
                     .flatMap(dependency -> getRemoteEntryFromLibrary(
                             new Artifact(
@@ -225,6 +102,37 @@ public class ArtifactResolverService {
                                     dependency.getClassifier())))
                     .distinct();
         }).onFailure(Throwable::printStackTrace).get();
+    }
+
+    private List<org.eclipse.aether.artifact.Artifact> getArtifactsLists(Artifact originalArtifact, RepositorySystem system, DefaultRepositorySystemSession session) throws ArtifactDescriptorException, DependencyResolutionException, ArtifactResolutionException {
+        session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
+        session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
+
+        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName());
+
+        ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
+        descriptorRequest.setArtifact(artifact);
+        descriptorRequest.setRepositories(Collections.singletonList(newCentralRepository));
+        // TODO: prevent this line from downloading jars locally:
+        ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor(session, descriptorRequest);
+
+        CollectRequest collectRequest = new CollectRequest();
+        collectRequest.setRootArtifact(descriptorResult.getArtifact());
+        collectRequest.setDependencies(descriptorResult.getDependencies());
+        collectRequest.setManagedDependencies(descriptorResult.getManagedDependencies());
+        collectRequest.setRepositories(descriptorRequest.getRepositories());
+
+        DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE,
+                JavaScopes.RUNTIME,
+                JavaScopes.TEST,
+                JavaScopes.SYSTEM,
+                JavaScopes.PROVIDED);
+        DependencyRequest dependencyRequest = new DependencyRequest(collectRequest, classpathFilter);
+
+        DependencyResult dependencyResult = system.resolveDependencies(session, dependencyRequest);
+        List<org.eclipse.aether.artifact.Artifact> managedArtifacts = dependencyResult.getRequest().getCollectRequest().getManagedDependencies().stream().map(Dependency::getArtifact).collect(Collectors.toList());
+        managedArtifacts.add(singleArtifactResolving(system, session, artifact));
+        return managedArtifacts;
     }
 
     private org.eclipse.aether.artifact.Artifact singleArtifactResolving(RepositorySystem system, DefaultRepositorySystemSession session, org.eclipse.aether.artifact.Artifact artifact) throws ArtifactResolutionException {
