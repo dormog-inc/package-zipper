@@ -3,6 +3,7 @@ package com.dor.package_zipper.models;
 import lombok.*;
 
 import java.io.Serializable;
+import java.util.Arrays;
 
 @Data
 @Builder
@@ -20,18 +21,32 @@ public class Artifact implements Serializable {
     private String packagingType = "jar";
     private String classifier;
 
-    public String getPackagingType() {
-        return this.packagingType == null ? "jar" : this.packagingType;
+    public Artifact(String fullNameArtifact) {
+        if (fullNameArtifact.contains(":")) {
+            String[] split = fullNameArtifact.split(":");
+            if (split.length < 3) {
+                throw new IllegalArgumentException("The artifact name should have format: groupId:artifactId:version");
+            }
+            this.groupId = split[0];
+            this.artifactId = split[1];
+            this.version = split[2];
+        } else if (fullNameArtifact.contains("/")) {
+            // TODO: enable the ability to send group/id/artifact-id/version format from the swagger ui
+            String[] split = fullNameArtifact.split("/");
+            if (split.length < 3) {
+                throw new IllegalArgumentException("The artifact name should have format: group/id/artifact-id/version");
+            }
+            this.groupId = String.join("/" , Arrays.asList(split).subList(0, split.length - 2));
+            this.artifactId = split[split.length - 2];
+            this.version = split[split.length - 1];
+        } else {
+            throw new IllegalArgumentException("The artifact name should look like this: \"org/springframework/boot/spring-boot/2.5.0\" " +
+                    "or this: \"org.springframework.boot:spring-boot:2.5.0\"");
+        }
     }
 
-    public Artifact(String fullNameArtifact) {
-        String[] split = fullNameArtifact.split(":");
-        if (split.length < 3) {
-            throw new RuntimeException("The artifact name should have format: groupId:artifactId:version");
-        }
-        this.groupId = split[0];
-        this.artifactId = split[1];
-        this.version = split[2];
+    public String getPackagingType() {
+        return this.packagingType == null ? "jar" : this.packagingType;
     }
 
     public String getArtifactFullName() {
@@ -46,5 +61,9 @@ public class Artifact implements Serializable {
             fullName += String.format(":%s", version);
         }
         return fullName;
+    }
+
+    public String getArtifactGradleFashionedName() {
+        return String.format("%s:%s:%s", groupId, artifactId, version);
     }
 }

@@ -1,82 +1,112 @@
 package com.dor.package_zipper.services;
 
 import com.dor.package_zipper.configuration.AppConfig;
+import com.dor.package_zipper.maven.resolver.AbstractEventsCrawlerRepositoryListener;
 import com.dor.package_zipper.maven.resolver.Booter;
-import com.dor.package_zipper.maven.resolver.ConsoleDependencyGraphDumper;
+import com.dor.package_zipper.maven.resolver.ConsoleRepositoryListener;
+import com.dor.package_zipper.maven.resolver.EventsCrawlerRepositoryListener;
 import com.dor.package_zipper.models.Artifact;
 import com.dor.package_zipper.models.ZipRemoteEntry;
+import io.vavr.control.Try;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
 import org.eclipse.aether.artifact.DefaultArtifact;
 import org.eclipse.aether.collection.CollectRequest;
-import org.eclipse.aether.collection.CollectResult;
-import org.eclipse.aether.collection.DependencyCollectionException;
 import org.eclipse.aether.graph.Dependency;
 import org.eclipse.aether.graph.DependencyFilter;
+import org.eclipse.aether.repository.RemoteRepository;
 import org.eclipse.aether.resolution.*;
 import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.aether.util.filter.DependencyFilterUtils;
 import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
 import org.eclipse.aether.util.graph.transformer.ConflictResolver;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-
-import org.jboss.shrinkwrap.resolver.api.maven.Maven;
-import org.jboss.shrinkwrap.resolver.api.maven.MavenArtifactInfo;
-import org.jboss.shrinkwrap.resolver.api.maven.MavenResolvedArtifact;
-import org.jboss.shrinkwrap.resolver.api.maven.MavenResolverSystem;
-import org.jboss.shrinkwrap.resolver.api.maven.MavenStrategyStage;
-import org.jboss.shrinkwrap.resolver.api.maven.ScopeType;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.w3c.dom.Document;
-import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
+import reactor.core.publisher.Flux;
 
-import java.io.IOException;
-import java.io.StringReader;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import javax.xml.xpath.XPath;
-import javax.xml.xpath.XPathConstants;
-import javax.xml.xpath.XPathExpression;
-import javax.xml.xpath.XPathExpressionException;
-import javax.xml.xpath.XPathFactory;
 
 @Service
 @AllArgsConstructor
 @Slf4j
 public class ArtifactResolverService {
+    private final Environment env;
     private final AppConfig appConfig;
+    private final RemoteRepository newCentralRepository;
 
-    public Flux<ZipRemoteEntry> resolveArtifact(Artifact artifact, boolean withTransitivity) {
-//        MavenStrategyStage mavenStrategyStage = Maven.resolver().resolve(artifact.getArtifactFullName());
-        Flux<ZipRemoteEntry> zipRemoteEntries = resolveMavenStrategy(artifact);
-        return Flux.concat(zipRemoteEntries, getRemoteEntryFromLibrary(artifact)).distinct();
+    public Flux<ZipRemoteEntry> resolveArtifact(Artifact artifact, boolean thin) {
+        if (thin) {
+            return thinResolvingStrategy(artifact);
+        } else {
+            return completeResolvingStrategy(artifact);
+        }
     }
 
-//    public Flux<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, boolean withTransitivity) {
-//        MavenResolverSystem mavenResolverSystem = Maven.resolver();
-//        MavenStrategyStage mavenStrategyStage = mavenResolverSystem.resolve(
-//                artifacts.stream().map(Artifact::getArtifactFullName).collect(Collectors.toList()));
-//        return Flux.concat(
-//                resolveMavenStrategy(mavenStrategyStage),
-//                Flux.fromIterable(artifacts).map(artifact -> getRemoteEntryFromLibrary(artifact)).flatMap(a -> a))
-//                .distinct();
-//    }
+    /**
+     * Resolve artifacts without import scope. This isn't a full nor traditional Maven strategy,
+     * but this not-pom-friendly strategy turned out to be useful in many cases.
+     */
+    private Flux<ZipRemoteEntry> thinResolvingStrategy(Artifact originalArtifact) {
+        return Try.of(() -> {
+            RepositorySystem system = Booter.newRepositorySystem();
+            DefaultRepositorySystemSession session = new Booter().newRepositorySystemSession(system);
 
-//    public Flux<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean withTransitivity) {
+            session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
+            session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
+
+            org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName());
+
+            ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
+            descriptorRequest.setArtifact(artifact);
+            descriptorRequest.setRepositories(Collections.singletonList(newCentralRepository));
+            // TODO: prevent this line from downloading jars locally:
+            ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor(session, descriptorRequest);
+
+            CollectRequest collectRequest = new CollectRequest();
+            collectRequest.setRootArtifact(descriptorResult.getArtifact());
+            collectRequest.setDependencies(descriptorResult.getDependencies());
+            collectRequest.setManagedDependencies(descriptorResult.getManagedDependencies());
+            collectRequest.setRepositories(descriptorRequest.getRepositories());
+
+            DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE,
+                    JavaScopes.RUNTIME,
+                    JavaScopes.TEST,
+                    JavaScopes.SYSTEM,
+                    JavaScopes.PROVIDED);
+            DependencyRequest dependencyRequest = new DependencyRequest(collectRequest, classpathFilter);
+
+            DependencyResult dependencyResult = system.resolveDependencies(session, dependencyRequest);
+            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = dependencyResult.getRequest().getCollectRequest().getManagedDependencies().stream().map(Dependency::getArtifact).collect(Collectors.toList());
+            managedArtifacts.add(singleArtifactResolving(system, session, artifact));
+            return Flux.fromIterable(managedArtifacts)
+                    .flatMap(dependency -> getRemoteEntryFromLibrary(
+                            new Artifact(
+                                    dependency.getGroupId(),
+                                    dependency.getArtifactId(),
+                                    dependency.getVersion(),
+                                    dependency.getExtension(),
+                                    dependency.getClassifier())))
+                    .distinct();
+        }).onFailure(Throwable::printStackTrace).get();
+    }
+
+    public Flux<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, boolean thin) {
+        if (thin) {
+            return Flux.fromIterable(artifacts)
+                    .flatMap(this::thinResolvingStrategy);
+        } else {
+            return Flux.fromIterable(artifacts)
+                    .flatMap(this::completeResolvingStrategy);
+        }
+    }
+
+//    public Flux<ZipRemoteEntry> resolveArtifactFromPom(MultipartFile pomFile, boolean thin) {
 //        Flux<ZipRemoteEntry> zipRemoteEntries = null;
 //        Path path = Paths.get(
 //                pomFile.getOriginalFilename().replace(".pom", "") + "_" + System.currentTimeMillis() / 1000L
@@ -98,51 +128,114 @@ public class ArtifactResolverService {
 //        }
 //        return zipRemoteEntries;
 //    }
+//
+//    public MavenWorkingSessionz loadPomFromFile(File pomFile, Properties userProperties, String... profiles)
+//            throws IllegalArgumentException {
+//
+//        final DefaultModelBuildingRequest request = new DefaultModelBuildingRequest()
+//                .setSystemProperties(SecurityActions.getProperties()).setProfiles(this.getSettingsDefinedProfiles())
+//                .setPomFile(pomFile).setActiveProfileIds(SettingsXmlProfileSelector.explicitlyActivatedProfiles(profiles))
+//                .setInactiveProfileIds(SettingsXmlProfileSelector.explicitlyDisabledProfiles(profiles));
+//
+//        final DefaultModelBuildingRequest request = new DefaultArtifactDescriptorReader()
+//                .
+//                .setPomFile(pomFile).setActiveProfileIds(SettingsXmlProfileSelector.explicitlyActivatedProfiles(profiles))
+//                .setInactiveProfileIds(SettingsXmlProfileSelector.explicitlyDisabledProfiles(profiles));
+//
+//        if (userProperties != null){
+//            request.setUserProperties(userProperties);
+//        }
+//
+//        ModelBuilder builder = new DefaultModelBuilderFactory().newInstance();
+//        ModelBuildingResult result;
+//        try {
+//            request.setModelResolver(new MavenModelResolver(getSystem(), getSession(), getRemoteRepositories()));
+//            result = builder.build(request);
+//        }
+//        // wrap exception message
+//        catch (ModelBuildingException e) {
+//            String pomPath = request.getPomFile().getAbsolutePath();
+//            StringBuilder sb = new StringBuilder("Found ").append(e.getProblems().size())
+//                    .append(" problems while building POM model from ").append(pomPath).append("\n");
+//
+//            int counter = 1;
+//            for (ModelProblem problem : e.getProblems()) {
+//                sb.append(counter++).append("/ ").append(problem).append("\n");
+//            }
+//
+//            throw new IllegalArgumentException(sb.toString());
+//        }
+//
+//        // get and update model
+//        Model model = result.getEffectiveModel();
+//
+//
+//        model.getDependencies()
+//        return this;
+//    }
 
-    private Flux<ZipRemoteEntry> resolveMavenStrategy(Artifact artifactOriginal) {
-        try {
+    private Flux<ZipRemoteEntry> completeResolvingStrategy(Artifact originalArtifact) {
+        return Try.of(() -> {
+            RepositorySystem system = Booter.newRepositorySystem();
 
-        RepositorySystem system = Booter.newRepositorySystem( Booter.selectFactory(null) );
+            AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener;
+            if (Arrays.asList(env.getActiveProfiles()).contains("dev")) {
+                eventsCrawlerRepositoryListener = new ConsoleRepositoryListener();
+            } else {
+                eventsCrawlerRepositoryListener = new EventsCrawlerRepositoryListener();
+            }
+            DefaultRepositorySystemSession session = new Booter(eventsCrawlerRepositoryListener).newRepositorySystemSession(system);
 
-        DefaultRepositorySystemSession session = Booter.newRepositorySystemSession( system );
+            session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
+            session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
 
-        session.setConfigProperty( ConflictResolver.CONFIG_PROP_VERBOSE, true );
-        session.setConfigProperty( DependencyManagerUtils.CONFIG_PROP_VERBOSE, true );
+            org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName());
 
-//        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(
-//                artifactOriginal.getGroupId(), artifactOriginal.getArtifactId(),  null, artifactOriginal.getVersion());
-        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(artifactOriginal.getArtifactFullName());
 
-        ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
-        descriptorRequest.setArtifact( artifact );
-        descriptorRequest.setRepositories( Booter.newRepositories( system, session ) );
-        ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor( session, descriptorRequest );
+            ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
+            descriptorRequest.setArtifact(artifact);
+            descriptorRequest.setRepositories(Collections.singletonList(newCentralRepository));
+            // TODO: prevent this line from downloading jars locally:
+            ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor(session, descriptorRequest);
 
-        CollectRequest collectRequest = new CollectRequest();
-        collectRequest.setRootArtifact( descriptorResult.getArtifact() );
-        collectRequest.setDependencies( descriptorResult.getDependencies() );
-        collectRequest.setManagedDependencies( descriptorResult.getManagedDependencies() );
-        collectRequest.setRepositories( descriptorRequest.getRepositories() );
+            CollectRequest collectRequest = new CollectRequest();
+            collectRequest.setRootArtifact(descriptorResult.getArtifact());
+            collectRequest.setDependencies(descriptorResult.getDependencies());
+            collectRequest.setManagedDependencies(descriptorResult.getManagedDependencies());
+            collectRequest.setRepositories(descriptorRequest.getRepositories());
 
-        DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE, JavaScopes.PROVIDED);
-        DependencyRequest dependencyRequest = new DependencyRequest( collectRequest, classpathFilter );
+            DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE,
+                    JavaScopes.RUNTIME,
+                    JavaScopes.TEST,
+                    JavaScopes.SYSTEM,
+                    JavaScopes.PROVIDED);
+            DependencyRequest dependencyRequest = new DependencyRequest(collectRequest, classpathFilter);
 
-        List<ArtifactResult> collectResult = system.resolveDependencies( session, dependencyRequest ).getArtifactResults();
-        return Flux.fromIterable(collectResult)
-                .map(dependency -> getRemoteEntryFromLibrary(
-                                new Artifact(
-                                        dependency.getArtifact().getGroupId(),
-                                        dependency.getArtifact().getArtifactId(),
-                                        dependency.getArtifact().getVersion())))
-                        .flatMap(a -> a).distinct();
-        } catch (ArtifactDescriptorException | DependencyResolutionException e) {
-            e.printStackTrace();
-        }
-        return null;
+            DependencyResult dependencyResult = system.resolveDependencies(session, dependencyRequest);
+            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = dependencyResult.getRequest().getCollectRequest().getManagedDependencies().stream().map(Dependency::getArtifact).collect(Collectors.toList());
+            managedArtifacts.addAll(eventsCrawlerRepositoryListener.getAllDeps());
+            managedArtifacts.add(singleArtifactResolving(system, session, artifact));
+            return Flux.fromIterable(managedArtifacts)
+                    .flatMap(dependency -> getRemoteEntryFromLibrary(
+                            new Artifact(
+                                    dependency.getGroupId(),
+                                    dependency.getArtifactId(),
+                                    dependency.getVersion(),
+                                    dependency.getExtension(),
+                                    dependency.getClassifier())))
+                    .distinct();
+        }).onFailure(Throwable::printStackTrace).get();
+    }
+
+    private org.eclipse.aether.artifact.Artifact singleArtifactResolving(RepositorySystem system, DefaultRepositorySystemSession session, org.eclipse.aether.artifact.Artifact artifact) throws ArtifactResolutionException {
+        ArtifactRequest artifactRequest = new ArtifactRequest();
+        artifactRequest.setArtifact(artifact);
+        artifactRequest.setRepositories(Collections.singletonList(newCentralRepository));
+        ArtifactResult artifactResult = system.resolveArtifact(session, artifactRequest);
+        return artifactResult.getArtifact();
     }
 
     private Flux<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact) {
-        Flux<ZipRemoteEntry> zipEntriesFlux = null;
         List<ZipRemoteEntry> zipEntries = new ArrayList<>();
         String path = String.format("%s/%s/%s/%s-%s",
                 artifact.getGroupId().replace(".", "/"),
@@ -152,80 +245,23 @@ public class ArtifactResolverService {
                 artifact.getVersion());
         String libPath = String.format("%s.%s", path, artifact.getPackagingType());
         String libUrl = String.format("%s/%s", appConfig.getMavenUrl(), libPath);
-        String pomUrl = libUrl;
         zipEntries.add(new ZipRemoteEntry(libPath, libUrl));
-
         if (!artifact.getPackagingType().equals("pom")) {
             String pomPath = String.format("%s.%s", path, "pom");
-            pomUrl = String.format("%s/%s", appConfig.getMavenUrl(), pomPath);
+            String pomUrl = String.format("%s/%s", appConfig.getMavenUrl(), pomPath);
             zipEntries.add(new ZipRemoteEntry(pomPath, pomUrl));
         }
-
-        Flux<ZipRemoteEntry> pomEntries = getParentPomEntries(pomUrl);
-        if (pomEntries != null) {
-            zipEntriesFlux = Flux.concat(pomEntries, Flux.fromIterable(zipEntries)).distinct();
-        }
-        return zipEntriesFlux.distinct();
+        return Flux.fromIterable(zipEntries);
     }
 
-    private Flux<ZipRemoteEntry> getParentPomEntries(String pomUrl) {
-        return WebClient.create(pomUrl).get().retrieve().bodyToMono(String.class)
-                .filter(pomStirng -> {
-                    return pomStirng.contains("<parent>");
-                })
-                .map(this::loadXMLFromString)
-                .filter(doc -> {
-                    XPathFactory xPathfactory = XPathFactory.newInstance();
-                    XPath xpath = xPathfactory.newXPath();
-                    XPathExpression expr;
-                    String artifactId = "";
-                    try {
-                        expr = xpath.compile("/project/parent/artifactId/text()");
-                        artifactId = expr.evaluate(doc, XPathConstants.STRING).toString();
-                    } catch (XPathExpressionException e) {
-                        // TODO Auto-generated catch block
-                        e.printStackTrace();
-                    }
-                    return !artifactId.equals("");
-                })
-                .map(doc -> {
-                    List<String> a = Arrays.asList("groupId", "artifactId", "version");
-                    List<String> b = new ArrayList<>();
-                    for(int i = 0; i< a.size(); i++) {
-                        XPathFactory xPathfactory = XPathFactory.newInstance();
-                        XPath xpath = xPathfactory.newXPath();
-                        XPathExpression expr;
-                        try {
-                            String bla = pomUrl;
-                            expr = xpath.compile(String.format("/project/parent/%s/text()", a.get(i)));
-                            b.add(expr.evaluate(doc, XPathConstants.STRING).toString());
-                        } catch (Exception e) {
-                            // TODO Auto-generated catch block
-                            e.printStackTrace();
-                        }
-                    }          
-
-                    Artifact parent = new Artifact(b.get(0), b.get(1), b.get(2));
-                    parent.setPackagingType("pom");
-                    return parent;
-                })
-                .map(artifact -> getRemoteEntryFromLibrary(artifact)).flux().flatMap(a -> a).distinct();
+    private String getPomUrl(Artifact artifact) {
+        String path = String.format("%s/%s/%s/%s-%s",
+                artifact.getGroupId().replace(".", "/"),
+                artifact.getArtifactId(),
+                artifact.getVersion(),
+                artifact.getArtifactId(),
+                artifact.getVersion());
+        String pomPath = String.format("%s.%s", path, "pom");
+        return String.format("%s/%s", appConfig.getMavenUrl(), pomPath);
     }
-
-    private Document loadXMLFromString(String xml) {
-        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-        DocumentBuilder builder;
-        Document document = null;
-        try {
-            builder = factory.newDocumentBuilder();
-            InputSource is = new InputSource(new StringReader(xml));
-            document = builder.parse(is);
-        } catch (ParserConfigurationException | SAXException | IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-            throw new RuntimeException(e);
-        }
-        return document;
-    }
-
 }

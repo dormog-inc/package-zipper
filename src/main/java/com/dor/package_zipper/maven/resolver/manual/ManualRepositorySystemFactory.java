@@ -14,32 +14,23 @@ import org.slf4j.LoggerFactory;
  * A factory for repository system instances that employs Maven Artifact Resolver's built-in service locator
  * infrastructure to wire up the system's components.
  */
-public class ManualRepositorySystemFactory
-{
-    private static final Logger LOGGER = LoggerFactory.getLogger( ManualRepositorySystemFactory.class );
+public class ManualRepositorySystemFactory {
+    private static final Logger LOGGER = LoggerFactory.getLogger(ManualRepositorySystemFactory.class);
 
-    public static RepositorySystem newRepositorySystem()
-    {
-        /*
-         * Aether's components implement org.eclipse.aether.spi.locator.Service to ease manual wiring and using the
-         * prepopulated DefaultServiceLocator, we only need to register the repository connector and transporter
-         * factories.
-         */
+    public static RepositorySystem newRepositorySystem() {
         DefaultServiceLocator locator = MavenRepositorySystemUtils.newServiceLocator();
-        locator.addService( RepositoryConnectorFactory.class, BasicRepositoryConnectorFactory.class );
-        locator.addService( TransporterFactory.class, HttpTransporterFactory.class );
+        locator.addService(RepositoryConnectorFactory.class, BasicRepositoryConnectorFactory.class);
+        locator.addService(TransporterFactory.class, HttpTransporterFactory.class);
 
-        locator.setErrorHandler( new DefaultServiceLocator.ErrorHandler()
-        {
+        locator.setErrorHandler(new DefaultServiceLocator.ErrorHandler() {
             @Override
-            public void serviceCreationFailed( Class<?> type, Class<?> impl, Throwable exception )
-            {
-               LOGGER.error( "Service creation failed for {} with implementation {}",
-                        type, impl, exception );
+            public void serviceCreationFailed(Class<?> type, Class<?> impl, Throwable exception) {
+                LOGGER.error("Service creation failed for {} with implementation {}",
+                        type, impl, exception);
             }
-        } );
+        });
 
-        return locator.getService( RepositorySystem.class );
+        return locator.getService(RepositorySystem.class);
     }
 
 }
