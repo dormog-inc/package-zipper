@@ -6,6 +6,7 @@ import com.dor.package_zipper.maven.resolver.Booter;
 import com.dor.package_zipper.maven.resolver.ConsoleRepositoryListener;
 import com.dor.package_zipper.maven.resolver.EventsCrawlerRepositoryListener;
 import com.dor.package_zipper.models.Artifact;
+import com.dor.package_zipper.models.ShipmentLevel;
 import com.dor.package_zipper.models.ZipRemoteEntry;
 import io.vavr.control.Try;
 import lombok.AllArgsConstructor;
@@ -24,12 +25,10 @@ import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
 import org.eclipse.aether.util.graph.transformer.ConflictResolver;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestParam;
 import reactor.core.publisher.Flux;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,46 +39,16 @@ public class ArtifactResolverService {
     private final AppConfig appConfig;
     private final RemoteRepository newCentralRepository;
 
-    public Flux<ZipRemoteEntry> resolveArtifact(Artifact artifact, boolean thin) {
-        if (thin) {
-            return thinResolvingStrategy(artifact);
-        } else {
-            return completeResolvingStrategy(artifact);
-        }
+    public Flux<ZipRemoteEntry> resolveArtifact(Artifact artifact, ShipmentLevel level) {
+        return switch (level) {
+            case HEAVY -> heavyLevelResolvingStrategy(artifact);
+            case JAR_BASED ->  jarsBasedLevelResolvingStrategy(artifact);
+            case EXACTLY ->  exactlyLevelResolvingStrategy(artifact);
+            case SINGLE ->  singleLevelResolvingStrategy(artifact);
+        };
     }
 
-    /**
-     * Resolve artifacts without import scope. This isn't a full nor traditional Maven strategy,
-     * but this not-pom-friendly strategy turned out to be useful in many cases.
-     */
-    private Flux<ZipRemoteEntry> thinResolvingStrategy(Artifact originalArtifact) {
-        return Try.of(() -> {
-            RepositorySystem system = Booter.newRepositorySystem();
-            DefaultRepositorySystemSession session = new Booter().newRepositorySystemSession(system);
-            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsLists(originalArtifact, system, session);
-            return Flux.fromIterable(managedArtifacts)
-                    .flatMap(dependency -> getRemoteEntryFromLibrary(
-                            new Artifact(
-                                    dependency.getGroupId(),
-                                    dependency.getArtifactId(),
-                                    dependency.getVersion(),
-                                    dependency.getExtension(),
-                                    dependency.getClassifier())))
-                    .distinct();
-        }).onFailure(Throwable::printStackTrace).get();
-    }
-
-    public Flux<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, boolean thin) {
-        if (thin) {
-            return Flux.fromIterable(artifacts)
-                    .flatMap(this::thinResolvingStrategy);
-        } else {
-            return Flux.fromIterable(artifacts)
-                    .flatMap(this::completeResolvingStrategy);
-        }
-    }
-
-    private Flux<ZipRemoteEntry> completeResolvingStrategy(Artifact originalArtifact) {
+    private Flux<ZipRemoteEntry> heavyLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
             RepositorySystem system = Booter.newRepositorySystem();
 
@@ -92,26 +61,86 @@ public class ArtifactResolverService {
             DefaultRepositorySystemSession session = new Booter(eventsCrawlerRepositoryListener).newRepositorySystemSession(system);
             List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsLists(originalArtifact, system, session);
             managedArtifacts.addAll(eventsCrawlerRepositoryListener.getAllDeps());
-            return Flux.fromIterable(managedArtifacts)
-                    .flatMap(dependency -> getRemoteEntryFromLibrary(
-                            new Artifact(
-                                    dependency.getGroupId(),
-                                    dependency.getArtifactId(),
-                                    dependency.getVersion(),
-                                    dependency.getExtension(),
-                                    dependency.getClassifier())))
-                    .distinct();
+            return getZipRemoteEntryFlux(Flux.fromIterable(managedArtifacts));
         }).onFailure(Throwable::printStackTrace).get();
+    }
+
+    /**
+     * Resolve artifacts without import scope. This isn't a full nor traditional Maven strategy,
+     * but this not-pom-friendly strategy turned out to be useful in many cases.
+     */
+    private Flux<ZipRemoteEntry> jarsBasedLevelResolvingStrategy(Artifact originalArtifact) {
+        return Try.of(() -> {
+            RepositorySystem system = Booter.newRepositorySystem();
+            DefaultRepositorySystemSession session = new Booter().newRepositorySystemSession(system);
+            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsLists(originalArtifact, system, session);
+            return getZipRemoteEntryFlux(Flux.fromIterable(managedArtifacts));
+        }).onFailure(Throwable::printStackTrace).get();
+    }
+
+    /**
+     * Resolve artifacts exactly like a local maven client.
+     */
+    private Flux<ZipRemoteEntry> exactlyLevelResolvingStrategy(Artifact originalArtifact) {
+        return Try.of(() -> {
+            RepositorySystem system = Booter.newRepositorySystem();
+
+            AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener;
+            if (Arrays.asList(env.getActiveProfiles()).contains("dev")) {
+                eventsCrawlerRepositoryListener = new ConsoleRepositoryListener();
+            } else {
+                eventsCrawlerRepositoryListener = new EventsCrawlerRepositoryListener();
+            }
+            Set<org.eclipse.aether.artifact.Artifact> managedArtifacts = eventsCrawlerRepositoryListener.getAllDeps();
+            return getZipRemoteEntryFlux(Flux.fromIterable(managedArtifacts));
+        }).onFailure(Throwable::printStackTrace).get();
+    }
+
+    /**
+     * Resolve one artifact.
+     */
+    private Flux<ZipRemoteEntry> singleLevelResolvingStrategy(Artifact originalArtifact) {
+        return Try.of(() -> {
+            RepositorySystem system = Booter.newRepositorySystem();
+            DefaultRepositorySystemSession session = new Booter().newRepositorySystemSession(system);
+            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = Collections.singletonList(singleArtifactResolving(originalArtifact, system, session));
+            return getZipRemoteEntryFlux(Flux.fromIterable(managedArtifacts));
+        }).onFailure(Throwable::printStackTrace).get();
+    }
+
+    public Flux<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, ShipmentLevel level) {
+        return switch (level) {
+            case HEAVY -> Flux.fromIterable(artifacts)
+                    .flatMap(this::heavyLevelResolvingStrategy);
+            case JAR_BASED -> Flux.fromIterable(artifacts)
+                    .flatMap(this::jarsBasedLevelResolvingStrategy);
+            case EXACTLY -> Flux.fromIterable(artifacts)
+                    .flatMap(this::exactlyLevelResolvingStrategy);
+            case SINGLE -> Flux.fromIterable(artifacts)
+                    .flatMap(this::singleLevelResolvingStrategy);
+        };
+    }
+
+    private Flux<ZipRemoteEntry> getZipRemoteEntryFlux(Flux<org.eclipse.aether.artifact.Artifact> managedArtifacts) {
+        return managedArtifacts
+                .flatMap(dependency -> getRemoteEntryFromLibrary(
+                        new Artifact(
+                                dependency.getGroupId(),
+                                dependency.getArtifactId(),
+                                dependency.getVersion(),
+                                dependency.getExtension(),
+                                dependency.getClassifier())))
+                .distinct();
     }
 
     private List<org.eclipse.aether.artifact.Artifact> getArtifactsLists(Artifact originalArtifact, RepositorySystem system, DefaultRepositorySystemSession session) throws ArtifactDescriptorException, DependencyResolutionException, ArtifactResolutionException {
         session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
         session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
 
-        org.eclipse.aether.artifact.Artifact artifact = new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName());
+        org.eclipse.aether.artifact.Artifact aetherArtifact = new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName());
 
         ArtifactDescriptorRequest descriptorRequest = new ArtifactDescriptorRequest();
-        descriptorRequest.setArtifact(artifact);
+        descriptorRequest.setArtifact(aetherArtifact);
         descriptorRequest.setRepositories(Collections.singletonList(newCentralRepository));
         // TODO: prevent this line from downloading jars locally:
         ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor(session, descriptorRequest);
@@ -131,13 +160,13 @@ public class ArtifactResolverService {
 
         DependencyResult dependencyResult = system.resolveDependencies(session, dependencyRequest);
         List<org.eclipse.aether.artifact.Artifact> managedArtifacts = dependencyResult.getRequest().getCollectRequest().getManagedDependencies().stream().map(Dependency::getArtifact).collect(Collectors.toList());
-        managedArtifacts.add(singleArtifactResolving(system, session, artifact));
+        managedArtifacts.add(singleArtifactResolving(originalArtifact, system, session));
         return managedArtifacts;
     }
 
-    private org.eclipse.aether.artifact.Artifact singleArtifactResolving(RepositorySystem system, DefaultRepositorySystemSession session, org.eclipse.aether.artifact.Artifact artifact) throws ArtifactResolutionException {
+    private org.eclipse.aether.artifact.Artifact singleArtifactResolving(Artifact originalArtifact, RepositorySystem system, DefaultRepositorySystemSession session) throws ArtifactResolutionException {
         ArtifactRequest artifactRequest = new ArtifactRequest();
-        artifactRequest.setArtifact(artifact);
+        artifactRequest.setArtifact(new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName()));
         artifactRequest.setRepositories(Collections.singletonList(newCentralRepository));
         ArtifactResult artifactResult = system.resolveArtifact(session, artifactRequest);
         return artifactResult.getArtifact();
