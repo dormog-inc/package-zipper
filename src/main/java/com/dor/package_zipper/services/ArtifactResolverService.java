@@ -23,6 +23,7 @@ import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.aether.util.filter.DependencyFilterUtils;
 import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
 import org.eclipse.aether.util.graph.transformer.ConflictResolver;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -34,6 +35,7 @@ import java.util.stream.Collectors;
 @Service
 @AllArgsConstructor
 @Slf4j
+@EnableConfigurationProperties(AppConfig.class)
 public class ArtifactResolverService {
     private final Environment env;
     private final AppConfig appConfig;
@@ -51,13 +53,7 @@ public class ArtifactResolverService {
     private Flux<ZipRemoteEntry> heavyLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
             RepositorySystem system = Booter.newRepositorySystem();
-
-            AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener;
-            if (Arrays.asList(env.getActiveProfiles()).contains("dev")) {
-                eventsCrawlerRepositoryListener = new ConsoleRepositoryListener();
-            } else {
-                eventsCrawlerRepositoryListener = new EventsCrawlerRepositoryListener();
-            }
+            AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener = getAbstractEventsCrawlerRepositoryListener();
             DefaultRepositorySystemSession session = new Booter(eventsCrawlerRepositoryListener).newRepositorySystemSession(system);
             List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsLists(originalArtifact, system, session);
             managedArtifacts.addAll(eventsCrawlerRepositoryListener.getAllDeps());
@@ -84,16 +80,22 @@ public class ArtifactResolverService {
     private Flux<ZipRemoteEntry> exactlyLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
             RepositorySystem system = Booter.newRepositorySystem();
-
-            AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener;
-            if (Arrays.asList(env.getActiveProfiles()).contains("dev")) {
-                eventsCrawlerRepositoryListener = new ConsoleRepositoryListener();
-            } else {
-                eventsCrawlerRepositoryListener = new EventsCrawlerRepositoryListener();
-            }
+            AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener = getAbstractEventsCrawlerRepositoryListener();
+            DefaultRepositorySystemSession session = new Booter(eventsCrawlerRepositoryListener).newRepositorySystemSession(system);
+            getArtifactsLists(originalArtifact, system, session);
             Set<org.eclipse.aether.artifact.Artifact> managedArtifacts = eventsCrawlerRepositoryListener.getAllDeps();
             return getZipRemoteEntryFlux(Flux.fromIterable(managedArtifacts));
         }).onFailure(Throwable::printStackTrace).get();
+    }
+
+    private AbstractEventsCrawlerRepositoryListener getAbstractEventsCrawlerRepositoryListener() {
+        AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener;
+        if (Arrays.asList(env.getActiveProfiles()).contains("dev")) {
+            eventsCrawlerRepositoryListener = new ConsoleRepositoryListener();
+        } else {
+            eventsCrawlerRepositoryListener = new EventsCrawlerRepositoryListener();
+        }
+        return eventsCrawlerRepositoryListener;
     }
 
     /**
