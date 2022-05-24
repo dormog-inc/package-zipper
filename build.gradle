@@ -97,4 +97,4 @@ configure(checkstyleTest) {
 
 test.dependsOn('checkstyleMain', 'checkstyleTest')
 sourceCompatibility = JavaVersion.VERSION_17
-targetCompatibility = JavaVersion.VERSION_14
+targetCompatibility = JavaVersion.VERSION_17
