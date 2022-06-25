@@ -29,6 +29,7 @@ public class EventsCrawlerRepositoryListener extends AbstractEventsCrawlerReposi
     @Override
     public void artifactDownloaded(RepositoryEvent event) {
         File file = event.getFile();
+        log.info("The event's path is {}", event.getFile().getAbsolutePath());
         if (event.getArtifact().getExtension().equals("jar")) {
             if (file.exists()) {
                 try {
