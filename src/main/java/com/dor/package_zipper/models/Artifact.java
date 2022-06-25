@@ -31,7 +31,6 @@ public class Artifact implements Serializable {
             this.artifactId = split[1];
             this.version = split[2];
         } else if (fullNameArtifact.contains("/")) {
-            // TODO: enable the ability to send group/id/artifact-id/version format from the swagger ui
             String[] split = fullNameArtifact.split("/");
             if (split.length < 3) {
                 throw new IllegalArgumentException("The artifact name should have format: group/id/artifact-id/version");

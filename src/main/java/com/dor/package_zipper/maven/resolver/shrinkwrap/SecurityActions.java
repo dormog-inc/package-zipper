@@ -7,6 +7,7 @@ import java.security.PrivilegedExceptionAction;
 import java.util.Properties;
 
 /**
+ * -----------------------------------------------------NOTE-------------------------------------------------------
  * This class is a local instance of the same class from ShrinkWrap. By the time this should be replaced of removed
  * No need for CRs for this class
  */
@@ -63,19 +64,18 @@ public final class SecurityActions {
         catch (final PrivilegedActionException pae) {
             final Throwable t = pae.getCause();
             // Rethrow
-            if (t instanceof SecurityException) {
-                throw (SecurityException) t;
+            if (t instanceof SecurityException e) {
+                throw e;
             }
-            if (t instanceof NullPointerException) {
-                throw (NullPointerException) t;
-            } else if (t instanceof IllegalArgumentException) {
-                throw (IllegalArgumentException) t;
+            if (t instanceof NullPointerException e) {
+                throw e;
+            } else if (t instanceof IllegalArgumentException e) {
+                throw e;
             } else {
                 // No other checked Exception thrown by System.getProperty
                 try {
                     throw (RuntimeException) t;
                 }
-                // Just in case we've really messed up
                 catch (final ClassCastException cce) {
                     throw new RuntimeException("Obtained unchecked Exception; this code should never be reached", t);
                 }

@@ -26,6 +26,7 @@ import org.apache.maven.settings.crypto.SettingsDecryptionResult;
 import org.jboss.shrinkwrap.resolver.impl.maven.internal.decrypt.MavenSettingsDecrypter;
 
 /**
+ * -----------------------------------------------------NOTE-------------------------------------------------------
  * This class is a local instance of the same class from ShrinkWrap. By the time this should be replaced of removed
  * No need for CRs for this class
  */
@@ -177,8 +178,8 @@ public class MavenSettingsBuilder {
     }
 
     private SettingsBuildingRequest getDefaultSettingsBuildingRequest() {
-        SettingsBuildingRequest request = new DefaultSettingsBuildingRequest().setSystemProperties(SecurityActions
-                .getProperties());
+        SettingsBuildingRequest request = new DefaultSettingsBuildingRequest()
+                .setSystemProperties(SecurityActions.getProperties());
 
         String altUserSettings = SecurityActions.getProperty(ALT_USER_SETTINGS_XML_LOCATION);
         String altGlobalSettings = SecurityActions.getProperty(ALT_GLOBAL_SETTINGS_XML_LOCATION);
@@ -211,7 +212,7 @@ public class MavenSettingsBuilder {
         SettingsDecryptionRequest request = new DefaultSettingsDecryptionRequest(settings);
         SettingsDecryptionResult result = decrypter.decrypt(request);
 
-        if (result.getProblems().size() > 0) {
+        if (!result.getProblems().isEmpty()) {
             StringBuilder sb = new StringBuilder("Found ").append(result.getProblems().size())
                     .append(" problems while trying to decrypt settings configuration.");
 
@@ -250,7 +251,7 @@ public class MavenSettingsBuilder {
 
         String goOffline = SecurityActions.getProperty(ALT_MAVEN_OFFLINE);
         if (goOffline != null && goOffline.length() > 0) {
-            settings.setOffline(Boolean.valueOf(goOffline));
+            settings.setOffline(Boolean.parseBoolean(goOffline));
         }
 
         return settings;
