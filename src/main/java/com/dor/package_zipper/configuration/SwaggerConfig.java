@@ -16,7 +16,8 @@ public class SwaggerConfig {
                         .title("Package zipper API")
                         .version(appVersion)
                         .description(
-                                "package-zipper is a java project for downloading and streaming java packages and there dependecies as zip files from maven repository. this project depent on [zipstreamer](https://github.com/scosman/zipstreamer) for streaming all the package dependencies into a zip file")
+                                "package-zipper is a java project for downloading and streaming java packages and there " +
+                                        "dependencies as zip files from maven repository.")
                         .license(new License().name("Apache 2.0").url("http://springdoc.org")));
     }
 }

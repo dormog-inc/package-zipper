@@ -10,7 +10,6 @@ plugins {
 
 group = 'com.dor'
 version = '0.0.1-SNAPSHOT'
-sourceCompatibility = '8'
 
 configurations {
 	compileOnly {
@@ -27,17 +26,38 @@ ext {
 }
 
 dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-webflux'
+	implementation ("org.springframework.boot:spring-boot-starter-web") {
+		exclude group: "org.springframework.boot", module: "spring-boot-starter-tomcat"
+	}
+	implementation "org.springframework.boot:spring-boot-starter-webflux"
   	implementation 'com.google.code.gson:gson'
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-depchain:3.1.4'
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-impl-maven:3.1.4'
 	implementation 'org.springdoc:springdoc-openapi-ui:1.6.8'
+	implementation 'org.springdoc:springdoc-openapi-webflux-core:1.6.8'
 	implementation 'org.springdoc:springdoc-openapi-webflux-ui:1.6.8'
 	implementation 'com.squareup.tools.build:maven-archeologist:0.0.3.1'
 	implementation 'org.apache.maven.resolver:maven-resolver:1.8.0'
+	implementation ("org.apache.maven.resolver:maven-resolver-impl") {
+		version {
+			strictly "1.8.0"
+		}
+	}
+	implementation ("org.apache.maven.resolver:maven-resolver-transport-wagon") {
+		version {
+			strictly "1.8.0"
+		}
+	}
+	implementation ("org.apache.maven.resolver:maven-resolver-connector-basic") {
+		version {
+			strictly "1.8.0"
+		}
+	}
+	implementation 'org.apache.maven.resolver:maven-resolver-transport-http:1.8.0'
 
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-api-maven:3.1.4'
+	implementation 'com.google.inject:guice:5.1.0'
+	implementation 'io.vavr:vavr:0.10.4'
 
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
@@ -79,3 +99,5 @@ configure(checkstyleTest) {
 }
 
 test.dependsOn('checkstyleMain', 'checkstyleTest')
+sourceCompatibility = JavaVersion.VERSION_17
+targetCompatibility = JavaVersion.VERSION_17
