@@ -10,7 +10,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * A simplistic repository listener that logs events to the console.
+ * A simplistic {@link org.eclipse.aether.RepositorySystem} listener that extracts dependencies from events.
  */
 @Slf4j
 public class EventsCrawlerRepositoryListener extends AbstractEventsCrawlerRepositoryListener {

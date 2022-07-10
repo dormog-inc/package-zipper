@@ -11,7 +11,7 @@ import java.util.Set;
 import static java.util.Objects.requireNonNull;
 
 /**
- * A simplistic repository listener that logs events to the console.
+ * A simplistic {@link org.eclipse.aether.RepositorySystem} listener that logs events to the console.
  */
 public class ConsoleRepositoryListener extends AbstractEventsCrawlerRepositoryListener {
     private final Set<Artifact> allDeps = new HashSet<>();

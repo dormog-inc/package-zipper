@@ -34,11 +34,11 @@ import java.util.stream.Collectors;
 @Service
 @AllArgsConstructor
 @Slf4j
-@EnableConfigurationProperties(AppConfig.class)
 public class ArtifactResolverService {
-    private final Environment env;
-    private final AppConfig appConfig;
+    private final SessionManager sessionManager;
+    private final CleanBooterSessionManager cleanBooterSessionManager;
     private final RemoteRepository newCentralRepository;
+    private final RemoteEntriesService remoteEntriesService;
 
     public List<ZipRemoteEntry> resolveArtifact(Artifact artifact, ShipmentLevel level) {
         return switch (level) {
@@ -51,26 +51,10 @@ public class ArtifactResolverService {
 
     private List<ZipRemoteEntry> heavyLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
-            AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener = getAbstractEventsCrawlerRepositoryListener();
-            Booter booter = new Booter(eventsCrawlerRepositoryListener);
-            RepositorySystem system = Booter.newRepositorySystem();
-            DefaultRepositorySystemSession session = booter.newRepositorySystemSession(system);
-            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsListsFromArtifact(originalArtifact, system, session);
-            managedArtifacts.addAll(eventsCrawlerRepositoryListener.getAllDeps());
-            return getZipRemoteEntryFlux(managedArtifacts);
-        }).onFailure(Throwable::printStackTrace).get();
-    }
-
-    /**
-     * Resolve artifacts without import scope. This isn't a full nor traditional Maven strategy,
-     * but this not-pom-friendly strategy turned out to be useful in many cases.
-     */
-    private List<ZipRemoteEntry> jarsBasedLevelResolvingStrategy(Artifact originalArtifact) {
-        return Try.of(() -> {
-            Booter booter = new Booter();
-            RepositorySystem system = Booter.newRepositorySystem();
-            DefaultRepositorySystemSession session = booter.newRepositorySystemSession(system);
-            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsListsFromArtifact(originalArtifact, system, session);
+            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = getArtifactsListsFromArtifact(originalArtifact,
+                    sessionManager.getSystem(),
+                    sessionManager.getSession());
+            managedArtifacts.addAll(sessionManager.getEventsCrawlerRepositoryListener().getAllDeps());
             return getZipRemoteEntryFlux(managedArtifacts);
         }).onFailure(Throwable::printStackTrace).get();
     }
@@ -80,36 +64,29 @@ public class ArtifactResolverService {
      */
     private List<ZipRemoteEntry> exactlyLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
-            AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener = getAbstractEventsCrawlerRepositoryListener();
-            Booter booter = new Booter(eventsCrawlerRepositoryListener);
-            RepositorySystem system = Booter.newRepositorySystem();
-            DefaultRepositorySystemSession session = booter.newRepositorySystemSession(system);
-            getArtifactsListsFromArtifact(originalArtifact, system, session);
-            Set<org.eclipse.aether.artifact.Artifact> managedArtifacts = eventsCrawlerRepositoryListener.getAllDeps();
+            getArtifactsListsFromArtifact(originalArtifact, sessionManager.getSystem(), sessionManager.getSession());
+            Set<org.eclipse.aether.artifact.Artifact> managedArtifacts = sessionManager.getEventsCrawlerRepositoryListener().getAllDeps();
             return getZipRemoteEntryFlux(managedArtifacts.stream().toList());
         }).onFailure(Throwable::printStackTrace).get();
     }
 
-    private AbstractEventsCrawlerRepositoryListener getAbstractEventsCrawlerRepositoryListener() {
-        AbstractEventsCrawlerRepositoryListener eventsCrawlerRepositoryListener;
-        if (Arrays.asList(env.getActiveProfiles()).contains("dev")) {
-            eventsCrawlerRepositoryListener = new ConsoleRepositoryListener();
-        } else {
-            eventsCrawlerRepositoryListener = new EventsCrawlerRepositoryListener();
-        }
-        return eventsCrawlerRepositoryListener;
+    /**
+     * Resolve artifacts without import scope. This isn't a full nor traditional Maven strategy,
+     * but this not-pom-friendly strategy turned out to be useful in many cases.
+     */
+    private List<ZipRemoteEntry> jarsBasedLevelResolvingStrategy(Artifact originalArtifact) {
+        return Try.of(() -> getZipRemoteEntryFlux(getArtifactsListsFromArtifact(originalArtifact,
+                cleanBooterSessionManager.getSystem(),
+                cleanBooterSessionManager.getSession()))).onFailure(Throwable::printStackTrace).get();
     }
 
     /**
      * Resolve one artifact.
      */
     private List<ZipRemoteEntry> singleLevelResolvingStrategy(Artifact originalArtifact) {
-        return Try.of(() -> {
-            RepositorySystem system = Booter.newRepositorySystem();
-            DefaultRepositorySystemSession session = new Booter().newRepositorySystemSession(system);
-            List<org.eclipse.aether.artifact.Artifact> managedArtifacts = Collections.singletonList(singleArtifactResolving(originalArtifact, system, session));
-            return getZipRemoteEntryFlux(managedArtifacts);
-        }).onFailure(Throwable::printStackTrace).get();
+        return Try.of(() -> getZipRemoteEntryFlux(Collections.singletonList(singleArtifactResolving(originalArtifact,
+                cleanBooterSessionManager.getSystem(),
+                cleanBooterSessionManager.getSession())))).onFailure(Throwable::printStackTrace).get();
     }
 
     public List<ZipRemoteEntry> resolveArtifacts(List<Artifact> artifacts, ShipmentLevel level) {
@@ -131,7 +108,7 @@ public class ArtifactResolverService {
     private List<ZipRemoteEntry> getZipRemoteEntryFlux(List<org.eclipse.aether.artifact.Artifact> managedArtifacts) {
         return managedArtifacts
                 .stream()
-                .flatMap(dependency -> getRemoteEntryFromLibrary(
+                .flatMap(dependency -> remoteEntriesService.getRemoteEntryFromLibrary(
                         new Artifact(
                                 dependency.getGroupId(),
                                 dependency.getArtifactId(),
@@ -189,28 +166,5 @@ public class ArtifactResolverService {
         artifactRequest.setRepositories(Collections.singletonList(newCentralRepository));
         ArtifactResult artifactResult = system.resolveArtifact(session, artifactRequest);
         return artifactResult.getArtifact();
-    }
-
-    private List<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact) {
-        List<ZipRemoteEntry> zipEntries = new ArrayList<>();
-        String path = String.format("%s/%s/%s/%s-%s",
-                artifact.getGroupId().replace(".", "/"),
-                artifact.getArtifactId(),
-                artifact.getVersion(),
-                artifact.getArtifactId(),
-                artifact.getVersion());
-        String libPath = String.format("%s.%s", path, artifact.getPackagingType());
-        String libUrl = String.format("%s/%s", appConfig.getMavenUrl(), libPath);
-        zipEntries.add(new ZipRemoteEntry(libPath, libUrl));
-        addEquivalentPomUrlForEveryJar(artifact, zipEntries, path);
-        return zipEntries;
-    }
-
-    private void addEquivalentPomUrlForEveryJar(Artifact artifact, List<ZipRemoteEntry> zipEntries, String path) {
-        if (!artifact.getPackagingType().equals("pom")) {
-            String pomPath = String.format("%s.%s", path, "pom");
-            String pomUrl = String.format("%s/%s", appConfig.getMavenUrl(), pomPath);
-            zipEntries.add(new ZipRemoteEntry(pomPath, pomUrl));
-        }
     }
 }
