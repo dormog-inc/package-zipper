@@ -1,5 +1,6 @@
 package com.dor.package_zipper.models;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -8,8 +9,10 @@ import lombok.Data;
 @Data
 @Builder
 public class ZipRemoteEntry {
-    private String ZipPath;
-    private String Url;
+    @JsonProperty("ZipPath")
+    private String zipPath;
+    @JsonProperty("Url")
+    private String url;
 
     @Override
     public boolean equals(Object obj) {
@@ -20,15 +23,15 @@ public class ZipRemoteEntry {
         if (getClass() != obj.getClass())
             return false;
         ZipRemoteEntry other = (ZipRemoteEntry) obj;
-        if (Url == null) {
-            if (other.Url != null)
+        if (url == null) {
+            if (other.url != null)
                 return false;
-        } else if (!Url.equals(other.Url))
+        } else if (!url.equals(other.url))
             return false;
-        if (ZipPath == null) {
-            if (other.ZipPath != null)
+        if (zipPath == null) {
+            if (other.zipPath != null)
                 return false;
-        } else if (!ZipPath.equals(other.ZipPath))
+        } else if (!zipPath.equals(other.zipPath))
             return false;
         return true;
     }
@@ -36,8 +39,8 @@ public class ZipRemoteEntry {
     public int hashCode() {
         final int prime = 31;
         int result = 1;
-        result = prime * result + ((Url == null) ? 0 : Url.hashCode());
-        result = prime * result + ((ZipPath == null) ? 0 : ZipPath.hashCode());
+        result = prime * result + ((url == null) ? 0 : url.hashCode());
+        result = prime * result + ((zipPath == null) ? 0 : zipPath.hashCode());
         return result;
     }
 
