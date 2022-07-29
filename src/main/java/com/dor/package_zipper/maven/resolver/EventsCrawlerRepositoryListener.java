@@ -23,7 +23,7 @@ public class EventsCrawlerRepositoryListener extends AbstractEventsCrawlerReposi
 
     @Override
     public Set<Artifact> getAllDeps() {
-        return allDeps.stream().map(RepositoryAwareAetherArtifact::getArtifact).collect(Collectors.toSet());
+        return allDeps.stream().distinct().map(RepositoryAwareAetherArtifact::getArtifact).collect(Collectors.toSet());
     }
 
     public Set<RepositoryAwareAetherArtifact> getAllRepositoryAwareDeps() {

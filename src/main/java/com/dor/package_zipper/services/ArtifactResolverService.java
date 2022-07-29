@@ -17,6 +17,7 @@ import org.eclipse.aether.util.artifact.JavaScopes;
 import org.eclipse.aether.util.filter.DependencyFilterUtils;
 import org.eclipse.aether.util.graph.manager.DependencyManagerUtils;
 import org.eclipse.aether.util.graph.transformer.ConflictResolver;
+import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -34,10 +35,12 @@ import static com.dor.package_zipper.services.GradlePluginsHandler.GRADLE_PLUGIN
 @AllArgsConstructor
 @Slf4j
 public class ArtifactResolverService {
-    private final SessionManager sessionManager;
-    private final CleanBooterSessionManager cleanBooterSessionManager;
+    private final ObjectFactory<SessionManager> sessionManager;
+    private final ObjectFactory<CleanBooterSessionManager> cleanBooterSessionManager;
     private final List<RemoteRepository> remoteRepositories;
     private final RemoteEntriesService remoteEntriesService;
+
+
 
     public ResolvingProcessServiceResult resolveArtifact(Artifact artifact, ShipmentLevel level) {
         return switch (level) {
@@ -59,11 +62,12 @@ public class ArtifactResolverService {
 
     private ResolvingProcessServiceResult heavyLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
+            SessionManager sessionManagerObject = sessionManager.getObject();
             ResolvingProcessAetherResult resolvingProcessAetherResult = getArtifactsListsFromArtifact(originalArtifact,
-                    sessionManager.getSystem(),
-                    sessionManager.getSession());
+                    sessionManagerObject.getSystem(),
+                    sessionManagerObject.getSession());
             List<RepositoryAwareAetherArtifact> managedArtifacts = new ArrayList<>(resolvingProcessAetherResult.getArtifactList());
-            managedArtifacts.addAll(((EventsCrawlerRepositoryListener) sessionManager.getEventsCrawlerRepositoryListener()).getAllRepositoryAwareDeps());
+            managedArtifacts.addAll(((EventsCrawlerRepositoryListener) sessionManagerObject.getEventsCrawlerRepositoryListener()).getAllRepositoryAwareDeps());
             List<ZipRemoteEntry> zipRemoteEntryFlux = getZipRemoteEntryFlux(managedArtifacts);
             return new ResolvingProcessServiceResult(zipRemoteEntryFlux, resolvingProcessAetherResult.getExceptionMessage());
         }).onFailure(Throwable::printStackTrace).get();
@@ -74,8 +78,11 @@ public class ArtifactResolverService {
      */
     private ResolvingProcessServiceResult exactlyLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
-            ResolvingProcessAetherResult resolvingProcessAetherResult = getArtifactsListsFromArtifact(originalArtifact, sessionManager.getSystem(), sessionManager.getSession());
-            Set<RepositoryAwareAetherArtifact> managedArtifacts = ((EventsCrawlerRepositoryListener) sessionManager.getEventsCrawlerRepositoryListener()).getAllRepositoryAwareDeps();
+            SessionManager sessionManagerObject = sessionManager.getObject();
+            ResolvingProcessAetherResult resolvingProcessAetherResult = getArtifactsListsFromArtifact(originalArtifact,
+                    sessionManagerObject.getSystem(), sessionManagerObject.getSession());
+            Set<RepositoryAwareAetherArtifact> managedArtifacts =
+                    ((EventsCrawlerRepositoryListener) sessionManagerObject.getEventsCrawlerRepositoryListener()).getAllRepositoryAwareDeps();
             return new ResolvingProcessServiceResult(getZipRemoteEntryFlux(managedArtifacts.stream().toList()), resolvingProcessAetherResult.getExceptionMessage());
         }).onFailure(Throwable::printStackTrace).get();
     }
@@ -86,9 +93,10 @@ public class ArtifactResolverService {
      */
     private ResolvingProcessServiceResult jarsBasedLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
+            CleanBooterSessionManager sessionManagerObject = cleanBooterSessionManager.getObject();
             ResolvingProcessAetherResult resolvingProcessAetherResult = getArtifactsListsFromArtifact(originalArtifact,
-                    cleanBooterSessionManager.getSystem(),
-                    cleanBooterSessionManager.getSession());
+                    sessionManagerObject.getSystem(),
+                    sessionManagerObject.getSession());
             return new ResolvingProcessServiceResult(getZipRemoteEntryFlux(new ArrayList<>(resolvingProcessAetherResult
                     .getArtifactList())),
                     resolvingProcessAetherResult.getExceptionMessage());
@@ -101,8 +109,8 @@ public class ArtifactResolverService {
     private ResolvingProcessServiceResult singleLevelResolvingStrategy(Artifact originalArtifact) {
         return Try.of(() -> {
             ResolvingProcessAetherResult singleArtifactResolving = singleArtifactResolving(originalArtifact,
-                    cleanBooterSessionManager.getSystem(),
-                    cleanBooterSessionManager.getSession());
+                    cleanBooterSessionManager.getObject().getSystem(),
+                    cleanBooterSessionManager.getObject().getSession());
             return new ResolvingProcessServiceResult(getZipRemoteEntryFlux(new ArrayList<>(singleArtifactResolving.getArtifactList())));
         }).onFailure(Throwable::printStackTrace).get();
     }
@@ -163,7 +171,7 @@ public class ArtifactResolverService {
                 .map(RepositoryAwareAetherArtifact::new)
                 .collect(Collectors.toList());
         Try.of(() -> managedArtifacts.addAll(singleArtifactResolving(originalArtifact, system, session).getArtifactList()
-                        .stream().collect(Collectors.toList())))
+                        .stream().toList()))
                 .onFailure(err -> {
                     log.error(err.getMessage());
                     if (originalArtifact.getArtifactId().contains(GRADLE_PLUGIN)) {
@@ -175,7 +183,7 @@ public class ArtifactResolverService {
                                 originalArtifact.getVersion()), GRADLE_PLUGINS_REPOSITORY));
                     }
                 });
-        return managedArtifacts;
+        return managedArtifacts.stream().distinct().toList();
     }
 
     private DependencyRequest getDependencyRequest(ArtifactDescriptorRequest descriptorRequest, ArtifactDescriptorResult descriptorResult) {
