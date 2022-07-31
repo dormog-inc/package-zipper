@@ -18,10 +18,6 @@ public class RepositoryConfig {
     public static final String MAVEN_REPOSITORY = "https://repo1.maven.org/maven2";
     private final AppConfig appConfig;
 
-//    @Bean
-//    public RemoteRepository newCentralRepository() {
-//        return new RemoteRepository.Builder("central", "default", appConfig.getMavenUrl()).build();
-//    }
     @Bean
     public List<RemoteRepository> repositoriesList() {
         return List.of(

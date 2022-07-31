@@ -31,17 +31,6 @@ public class EventsCrawlerRepositoryListener extends AbstractEventsCrawlerReposi
     }
 
     @Override
-    public void artifactResolving(RepositoryEvent event) {
-        Optional<File> optionalFile = Optional.ofNullable(event.getFile());
-        optionalFile.ifPresent(file -> {
-            ArtifactRepository repository = event.getRepository();
-            if (repository instanceof RemoteRepository remoteRepository) {
-                allDeps.add(new RepositoryAwareAetherArtifact(event.getArtifact(), remoteRepository.getUrl()));
-            }
-        });
-    }
-
-    @Override
     public void artifactDownloaded(RepositoryEvent event) {
         Optional<File> optionalFile = Optional.ofNullable(event.getFile());
         optionalFile.ifPresent(file -> {
