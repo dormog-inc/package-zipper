@@ -75,7 +75,7 @@ public class PackageZipperController {
             @Schema(type = "list", example = "[\"org.jetbrains:annotations:23.0.0\", \"org/jetbrains/annotations/22.0.0\"]")
             @RequestBody List<String> artifactStringList,
             @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level,
-            @RequestBody List<String> customRepositoriesList) {
+            @RequestParam(required = false) List<String> customRepositoriesList) {
         List<String> sessionsRemoteRepositoryList = this.remoteRepositoryList.stream().map(RemoteRepository::getUrl).distinct().toList();
         sessionsRemoteRepositoryList.addAll(customRepositoriesList);
         var artifactsList = artifactStringList.stream().map(Artifact::new).toList();
@@ -96,8 +96,7 @@ public class PackageZipperController {
     @Tag(name = "plugins")
     public ResponseEntity<Flux<DataBuffer>> streamGradlePlugins(@RequestParam String artifact,
                                                                 @RequestParam String version,
-                                                                @RequestParam(defaultValue = "heavy") ShipmentLevel level,
-                                                                @RequestParam(defaultValue = "heavy") List<RemoteRepository> remoteRepositories) {
+                                                                @RequestParam(defaultValue = "HEAVY") ShipmentLevel level) {
         return streamZippedArtifact(GradlePluginsHandler.formatGradlePluginPomName(artifact, version), level);
     }
 
