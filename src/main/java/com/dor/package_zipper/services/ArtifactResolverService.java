@@ -199,7 +199,6 @@ public class ArtifactResolverService {
                     .stream().toList());
             return new ResolvingProcessAetherResult(managedArtifacts.stream().distinct().toList(), List.of());
         } catch (Exception e) {
-            log.error(e.getMessage());
             if (originalArtifact.getArtifactId().contains(GRADLE_PLUGIN)) {
                 managedArtifacts.add(new RepositoryAwareAetherArtifact(new DefaultArtifact(
                         originalArtifact.getGroupId(),
@@ -207,6 +206,8 @@ public class ArtifactResolverService {
                         originalArtifact.getClassifier(),
                         "jar",
                         originalArtifact.getVersion()), GRADLE_PLUGINS_REPOSITORY));
+            } else {
+                log.error(e.getMessage());
             }
             return new ResolvingProcessAetherResult(managedArtifacts.stream().distinct().toList(), List.of(e.getMessage()));
         }

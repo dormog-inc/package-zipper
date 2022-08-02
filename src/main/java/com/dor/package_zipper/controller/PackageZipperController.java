@@ -23,7 +23,6 @@ import reactor.core.publisher.Mono;
 
 import javax.annotation.PostConstruct;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import static com.dor.package_zipper.configuration.RepositoryConfig.GRADLE_PLUGINS_REPOSITORY;
 
@@ -63,9 +62,10 @@ public class PackageZipperController {
             @Schema(type = "string", example = "org.jetbrains:annotations:23.0.0")
             @PathVariable String artifact,
             @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level,
-            @RequestParam(required = false) List<String> customRepositoriesList) {
-        List<String> sessionsRemoteRepositoryList = this.remoteRepositoryList.stream().map(RemoteRepository::getUrl).distinct().toList();
-        sessionsRemoteRepositoryList.addAll(customRepositoriesList);
+            @Schema(type = "list", example = "https://maven.ceon.pl/artifactory/repo")
+            @RequestParam(name = "customRepositoriesList", required = false) List<String> optionalCustomRepositoriesList) {
+        List<String> sessionsRemoteRepositoryList = new ArrayList<String>(this.remoteRepositoryList.stream().map(RemoteRepository::getUrl).distinct().toList());
+        Optional.ofNullable(optionalCustomRepositoriesList).ifPresent(sessionsRemoteRepositoryList::addAll);
         return streamZippedArtifact(new Artifact(artifact), level, sessionsRemoteRepositoryList);
     }
 
@@ -75,9 +75,9 @@ public class PackageZipperController {
             @Schema(type = "list", example = "[\"org.jetbrains:annotations:23.0.0\", \"org/jetbrains/annotations/22.0.0\"]")
             @RequestBody List<String> artifactStringList,
             @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level,
-            @RequestParam(required = false) List<String> customRepositoriesList) {
+            @RequestParam(required = false) List<String> optionalCustomRepositoriesList) {
         List<String> sessionsRemoteRepositoryList = this.remoteRepositoryList.stream().map(RemoteRepository::getUrl).distinct().toList();
-        sessionsRemoteRepositoryList.addAll(customRepositoriesList);
+        sessionsRemoteRepositoryList.addAll(optionalCustomRepositoriesList);
         var artifactsList = artifactStringList.stream().map(Artifact::new).toList();
         List<ResolvingProcessServiceResult> resolvingProcessServiceResults = artifactResolverService.resolveArtifacts(artifactsList,
                 level,
