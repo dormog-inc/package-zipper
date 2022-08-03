@@ -84,11 +84,14 @@ public class PackageZipperController {
                 sessionsRemoteRepositoryList);
         List<String> exceptions = new ArrayList<>();
         final Flux<DataBuffer> dataBufferFlux = parseResolvingProcessResults(resolvingProcessServiceResults, exceptions);
-        return ResponseEntity.ok()
+        var response = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=multi-%s.zip".formatted(artifactsList.get(0).getArtifactId()))
-                .header(HttpHeaders.WARNING, exceptions.toArray(String[]::new))
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM);
+        if (!exceptions.isEmpty()) {
+            response.header(HttpHeaders.WARNING, exceptions.toArray(String[]::new));
+        }
+        return response
                 .body(dataBufferFlux);
     }
 
@@ -112,11 +115,14 @@ public class PackageZipperController {
                 defaultRemoteRepositoriesUrls);
         List<String> exceptions = new ArrayList<>();
         final Flux<DataBuffer> dataBufferFlux = parseResolvingProcessResults(resolvingProcessServiceResults, exceptions);
-        return ResponseEntity.ok()
+        var response = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=multi-%s.zip".formatted(mapOfArtifactAndVersion.keySet().stream().toList().get(0)))
-                .header(HttpHeaders.WARNING, exceptions.toArray(String[]::new))
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .contentType(MediaType.APPLICATION_OCTET_STREAM);
+        if (!exceptions.isEmpty()) {
+            response.header(HttpHeaders.WARNING, exceptions.toArray(String[]::new));
+        }
+        return response
                 .body(dataBufferFlux);
     }
 
@@ -132,11 +138,14 @@ public class PackageZipperController {
 
     private ResponseEntity<Flux<DataBuffer>> streamZippedArtifact(Artifact artifact, ShipmentLevel level, List<String> sessionsRemoteRepositoryUrls) {
         ResolvingProcessServiceResult resolvingProcessServiceResult = artifactResolverService.resolveArtifact(artifact, level, sessionsRemoteRepositoryUrls);
-        return ResponseEntity.ok()
+        var response = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=" + artifact.getArtifactFullName() + ".zip")
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .header(HttpHeaders.WARNING, resolvingProcessServiceResult.getExceptionMessages().toArray(String[]::new))
+                .contentType(MediaType.APPLICATION_OCTET_STREAM);
+        Optional.ofNullable(resolvingProcessServiceResult.getExceptionMessages()).ifPresent(exceptionMessages -> {
+            response.header(HttpHeaders.WARNING, exceptionMessages.toArray(String[]::new));
+        });
+        return response
                 .body(getZipStream(resolvingProcessServiceResult.getZipRemoteEntries()));
     }
 
