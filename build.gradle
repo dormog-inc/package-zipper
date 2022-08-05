@@ -64,7 +64,10 @@ dependencies {
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-api-maven:3.1.4'
 	implementation 'com.google.inject:guice:5.1.0'
 	implementation 'io.vavr:vavr:0.10.4'
-
+	implementation 'org.jsoup:jsoup:1.15.2'
+	implementation 'org.apache.maven.indexer:indexer-core:6.2.2'
+	implementation 'org.apache.maven.indexer:maven-indexer:6.2.2'
+	implementation 'org.eclipse.sisu:sisu-plexus:0.3.5'
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
