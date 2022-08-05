@@ -12,8 +12,11 @@ import org.apache.lucene.search.BooleanClause;
 import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.Query;
 import org.apache.maven.index.*;
+import org.apache.maven.index.context.IndexCreator;
 import org.apache.maven.index.context.IndexingContext;
 import org.apache.maven.index.expr.SourcedSearchExpression;
+import org.codehaus.plexus.*;
+import org.codehaus.plexus.component.repository.exception.ComponentLookupException;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.jsoup.Jsoup;
 import org.jsoup.nodes.Document;
@@ -26,7 +29,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import javax.annotation.PostConstruct;
+import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.dor.package_zipper.configuration.RepositoryConfig.GRADLE_PLUGINS_REPOSITORY;
@@ -91,13 +96,23 @@ public class QueriesController {
             @RequestParam String artifactId,
             @Schema(type = "string", example = "8.5.1")
             @RequestParam String version,
-            @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level) {
+            @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level) throws PlexusContainerException, ComponentLookupException, IOException {
         var artifact = new Artifact(groupId, artifactId, version);
         String baseUrl = "https://repo1.maven.org/maven2/" + artifact.getGroupId().replace(".", "/") + "/" + artifact.getArtifactId() + "/";
+        final DefaultContainerConfiguration config = new DefaultContainerConfiguration();
+        config.setClassPathScanning( PlexusConstants.SCANNING_INDEX );
         PlexusContainer plexusContainer = new DefaultPlexusContainer(config);
 
         // lookup the indexer components from plexus
         Indexer indexer = plexusContainer.lookup(Indexer.class);
+        File centralLocalCache = new File( "target/central-cache" );
+        File centralIndexDir = new File( "target/central-index" );
+
+        // Creators we want to use (search for fields it defines)
+        List<IndexCreator> indexers = new ArrayList<>();
+        indexers.add( plexusContainer.lookup( IndexCreator.class, "min" ) );
+        indexers.add( plexusContainer.lookup( IndexCreator.class, "jarContent" ) );
+        indexers.add( plexusContainer.lookup( IndexCreator.class, "maven-plugin" ) );
 
         IndexingContext centralContext =
                 indexer.createIndexingContext("central-context", "central", centralLocalCache, centralIndexDir,
@@ -112,7 +127,7 @@ public class QueriesController {
                 .add(aidQ, BooleanClause.Occur.MUST)
                 .build();
 
-        searchAndDump(indexer, "all artifacts under GA org.apache.maven.indexer:indexer-core", bq);
+        searchAndDump(indexer, "all artifacts under GA org.apache.maven.indexer:indexer-core", bq, centralContext);
 
 
         return WebClient.builder()
@@ -138,7 +153,7 @@ public class QueriesController {
                 });
     }
 
-    public void searchAndDump(Indexer nexusIndexer, String descr, Query q)
+    public void searchAndDump(Indexer nexusIndexer, String descr, Query q, IndexingContext centralContext)
             throws IOException {
         System.out.println("Searching for " + descr);
 
