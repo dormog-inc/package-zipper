@@ -4,22 +4,16 @@ import com.dor.package_zipper.configuration.AppConfig;
 import com.dor.package_zipper.models.*;
 import com.dor.package_zipper.services.ArtifactResolverService;
 import com.dor.package_zipper.services.GradlePluginsHandler;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.dor.package_zipper.services.streaming.PackageStreamsManager;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.eclipse.aether.repository.RemoteRepository;
 import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.reactive.function.BodyInserters;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 import javax.annotation.PostConstruct;
 import java.util.*;
@@ -33,6 +27,7 @@ public class PackageZipperController {
     private final AppConfig appConfig;
     private final ArtifactResolverService artifactResolverService;
     private final List<RemoteRepository> remoteRepositoryList;
+    private final PackageStreamsManager packageStreamsManager;
     private List<String> defaultRemoteRepositoriesUrls;
 
     @PostConstruct
@@ -53,7 +48,7 @@ public class PackageZipperController {
             @Schema(type = "string", example = "8.5.1")
             @RequestParam String version,
             @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level) {
-        return streamZippedArtifact(new Artifact(groupId, artifactId, version), level);
+        return packageStreamsManager.streamZippedArtifact(new Artifact(groupId, artifactId, version), level);
     }
 
     @Tag(name = "artifacts")
@@ -65,7 +60,7 @@ public class PackageZipperController {
             @Schema(type = "list", example = "https://maven.ceon.pl/artifactory/repo")
             @RequestParam(name = "customRepositoriesList", required = false) List<String> optionalCustomRepositoriesList) {
         List<String> sessionsRemoteRepositoryList = getSessionsRemoteRepositoryList(optionalCustomRepositoriesList);
-        return streamZippedArtifact(new Artifact(artifact), level, sessionsRemoteRepositoryList);
+        return packageStreamsManager.streamZippedArtifact(new Artifact(artifact), level, sessionsRemoteRepositoryList);
     }
 
     private List<String> getSessionsRemoteRepositoryList(List<String> optionalCustomRepositoriesList) {
@@ -76,27 +71,14 @@ public class PackageZipperController {
 
     @Tag(name = "artifacts")
     @PostMapping("/zip/artifact/multi")
-    public ResponseEntity<Flux<DataBuffer>> streamArtifactsZip(
+    public ResponseEntity<Flux<DataBuffer>> streamMultipleArtifactsZip(
             @Schema(type = "list", example = "[\"org.jetbrains:annotations:23.0.0\", \"org/jetbrains/annotations/22.0.0\"]")
             @RequestBody List<String> artifactStringList,
             @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level,
             @RequestParam(name = "customRepositoriesList", required = false) List<String> optionalCustomRepositoriesList) {
-        List<String> sessionsRemoteRepositoryList = getSessionsRemoteRepositoryList(optionalCustomRepositoriesList);
+        List<String> sessionRemoteRepositoryList = getSessionsRemoteRepositoryList(optionalCustomRepositoriesList);
         var artifactsList = artifactStringList.stream().map(Artifact::new).toList();
-        List<ResolvingProcessServiceResult> resolvingProcessServiceResults = artifactResolverService.resolveArtifacts(artifactsList,
-                level,
-                sessionsRemoteRepositoryList);
-        List<String> exceptions = new ArrayList<>();
-        final Flux<DataBuffer> dataBufferFlux = parseResolvingProcessResults(resolvingProcessServiceResults, exceptions);
-        var response = ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=multi-%s.zip".formatted(artifactsList.get(0).getArtifactId()))
-                .contentType(MediaType.APPLICATION_OCTET_STREAM);
-        if (!exceptions.isEmpty()) {
-            response.header(HttpHeaders.WARNING, exceptions.toArray(String[]::new));
-        }
-        return response
-                .body(dataBufferFlux);
+        return packageStreamsManager.getMultiFileStreamResponse(artifactsList, level, sessionRemoteRepositoryList);
     }
 
     @GetMapping(value = "/zip/plugin/")
@@ -104,74 +86,19 @@ public class PackageZipperController {
     public ResponseEntity<Flux<DataBuffer>> streamGradlePlugins(@RequestParam String artifact,
                                                                 @RequestParam String version,
                                                                 @RequestParam(defaultValue = "HEAVY") ShipmentLevel level) {
-        return streamZippedArtifact(GradlePluginsHandler.formatGradlePluginPomName(artifact, version), level);
+        return packageStreamsManager.streamZippedArtifact(GradlePluginsHandler.formatGradlePluginPomName(artifact, version), level);
     }
 
     @Tag(name = "plugins")
     @PostMapping("/zip/plugin/multi")
-    public ResponseEntity<Flux<DataBuffer>> streamArtifactsZip(
+    public ResponseEntity<Flux<DataBuffer>> streamMultipleArtifactsZip(
             @Schema(type = "object", example = "{\"io.github.bla.plugin-id\": \"1.0.3\"}")
             @RequestBody Map<String, String> mapOfArtifactAndVersion,
             @RequestParam(defaultValue = "HEAVY") ShipmentLevel level) {
-        List<ResolvingProcessServiceResult> resolvingProcessServiceResults = artifactResolverService.resolveArtifacts(
-                mapOfArtifactAndVersion.entrySet().stream().map((entry) -> GradlePluginsHandler.formatGradlePluginPomName(entry.getKey(), entry.getValue())).toList(),
-                level,
-                defaultRemoteRepositoriesUrls);
-        List<String> exceptions = new ArrayList<>();
-        final Flux<DataBuffer> dataBufferFlux = parseResolvingProcessResults(resolvingProcessServiceResults, exceptions);
-        var response = ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=multi-%s.zip".formatted(mapOfArtifactAndVersion.keySet().stream().toList().get(0)))
-                .contentType(MediaType.APPLICATION_OCTET_STREAM);
-        if (!exceptions.isEmpty()) {
-            response.header(HttpHeaders.WARNING, exceptions.toArray(String[]::new));
-        }
-        return response
-                .body(dataBufferFlux);
-    }
-
-    private Flux<DataBuffer> parseResolvingProcessResults(List<ResolvingProcessServiceResult> resolvingProcessServiceResults, List<String> exceptions) {
-        List<ZipRemoteEntry> zipRemoteEntries = new ArrayList<>();
-        resolvingProcessServiceResults.forEach(resolvingProcessServiceResult -> {
-            zipRemoteEntries.addAll(resolvingProcessServiceResult.getZipRemoteEntries());
-            exceptions.addAll(resolvingProcessServiceResult.getExceptionMessages());
-        });
-        return getZipStream(zipRemoteEntries);
-    }
-
-
-    private ResponseEntity<Flux<DataBuffer>> streamZippedArtifact(Artifact artifact, ShipmentLevel level, List<String> sessionsRemoteRepositoryUrls) {
-        ResolvingProcessServiceResult resolvingProcessServiceResult = artifactResolverService.resolveArtifact(artifact, level, sessionsRemoteRepositoryUrls);
-        var response = ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_DISPOSITION,
-                        "attachment; filename=" + artifact.getArtifactFullName() + ".zip")
-                .contentType(MediaType.APPLICATION_OCTET_STREAM);
-        Optional.ofNullable(resolvingProcessServiceResult.getExceptionMessages()).ifPresent(exceptionMessages -> {
-            response.header(HttpHeaders.WARNING, exceptionMessages.toArray(String[]::new));
-        });
-        return response
-                .body(getZipStream(resolvingProcessServiceResult.getZipRemoteEntries()));
-    }
-
-    public ResponseEntity<Flux<DataBuffer>> streamZippedArtifact(Artifact artifact, ShipmentLevel level) {
-        return streamZippedArtifact(artifact, level, defaultRemoteRepositoriesUrls);
-    }
-
-    private Flux<DataBuffer> getZipStream(List<ZipRemoteEntry> zipRemoteEntries) {
-        Mono<ZipStreamerBody> body = Mono.just(new ZipStreamerBody(zipRemoteEntries.stream().distinct().toList()))
-                .doOnNext(zipStreamerBody -> {
-                    try {
-                        log.info("zip streamer request body: {}", new ObjectMapper().writeValueAsString(zipStreamerBody));
-                    } catch (JsonProcessingException e) {
-                        e.printStackTrace();
-                    }
-                });
-        log.info("the stream zipper url is: " + appConfig.getStreamZipperUrl());
-        return WebClient.create(appConfig.getStreamZipperUrl())
-                .post().uri("/download")
-                .body(BodyInserters.fromProducer(body, ZipRemoteEntry.class))
-                .accept(MediaType.APPLICATION_OCTET_STREAM)
-                .retrieve()
-                .bodyToFlux(DataBuffer.class);
+        List<Artifact> artifactsList = mapOfArtifactAndVersion
+                .entrySet()
+                .stream()
+                .map((entry) -> GradlePluginsHandler.formatGradlePluginPomName(entry.getKey(), entry.getValue())).toList();
+        return packageStreamsManager.getMultiFileStreamResponse(artifactsList, level, defaultRemoteRepositoriesUrls);
     }
 }
