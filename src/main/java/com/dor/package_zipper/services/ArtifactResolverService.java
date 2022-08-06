@@ -237,10 +237,14 @@ public class ArtifactResolverService {
                                                                  RepositorySystem system,
                                                                  DefaultRepositorySystemSession session,
                                                                  List<RemoteRepository> remoteRepositories) throws ArtifactResolutionException {
-        ArtifactRequest artifactRequest = new ArtifactRequest();
-        artifactRequest.setArtifact(new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName()));
-        artifactRequest.setRepositories(remoteRepositories);
-        ArtifactResult artifactResult = system.resolveArtifact(session, artifactRequest);
-        return new ResolvingProcessAetherResult(Collections.singletonList(new RepositoryAwareAetherArtifact(artifactResult.getArtifact())));
+        try {
+            ArtifactRequest artifactRequest = new ArtifactRequest();
+            artifactRequest.setArtifact(new DefaultArtifact(originalArtifact.getArtifactGradleFashionedName()));
+            artifactRequest.setRepositories(remoteRepositories);
+            ArtifactResult artifactResult = system.resolveArtifact(session, artifactRequest);
+            return new ResolvingProcessAetherResult(Collections.singletonList(new RepositoryAwareAetherArtifact(artifactResult.getArtifact())));
+        } catch (Exception e) {
+            return new ResolvingProcessAetherResult(new ArrayList<>(), List.of(e.getMessage()));
+        }
     }
 }
