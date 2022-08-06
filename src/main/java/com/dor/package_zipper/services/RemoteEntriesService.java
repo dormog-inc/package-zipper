@@ -10,13 +10,15 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 
+import static com.dor.package_zipper.configuration.RepositoryConfig.GRADLE_PLUGINS_REPOSITORY;
+
 @Service
 @AllArgsConstructor
 @EnableConfigurationProperties(AppConfig.class)
 public class RemoteEntriesService {
     private final AppConfig appConfig;
 
-    public List<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact) {
+    public List<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact, String repositoryUrl) {
         List<ZipRemoteEntry> zipEntries = new ArrayList<>();
         String path = String.format("%s/%s/%s/%s-%s",
                 artifact.getGroupId().replace(".", "/"),
@@ -25,16 +27,16 @@ public class RemoteEntriesService {
                 artifact.getArtifactId(),
                 artifact.getVersion());
         String libPath = String.format("%s.%s", path, artifact.getPackagingType());
-        String libUrl = String.format("%s/%s", appConfig.getMavenUrl(), libPath);
+        String libUrl = String.format("%s/%s", repositoryUrl, libPath);
         zipEntries.add(new ZipRemoteEntry(libPath, libUrl));
-        addEquivalentPomUrlForEveryJar(artifact, zipEntries, path);
+        addEquivalentPomUrlForEveryJar(artifact, zipEntries, path, repositoryUrl);
         return zipEntries;
     }
 
-    private void addEquivalentPomUrlForEveryJar(Artifact artifact, List<ZipRemoteEntry> zipEntries, String path) {
+    private void addEquivalentPomUrlForEveryJar(Artifact artifact, List<ZipRemoteEntry> zipEntries, String path, String repositoryUrl) {
         if (!artifact.getPackagingType().equals("pom")) {
             String pomPath = String.format("%s.%s", path, "pom");
-            String pomUrl = String.format("%s/%s", appConfig.getMavenUrl(), pomPath);
+            String pomUrl = String.format("%s/%s", repositoryUrl, pomPath);
             zipEntries.add(new ZipRemoteEntry(pomPath, pomUrl));
         }
     }

@@ -4,6 +4,7 @@ plugins {
 	id 'org.asciidoctor.convert' version '1.5.8'
 	id 'com.github.johnrengelman.shadow' version '7.1.2'
 	id 'org.owasp.dependencycheck' version '7.0.3'
+	id "org.checkerframework" version "0.6.14"
 	id 'checkstyle'
 	id 'java'
 }
@@ -16,6 +17,11 @@ configurations {
 		extendsFrom annotationProcessor
 	}
 }
+//checkerFramework {
+//	checkers = [
+//			'org.checkerframework.checker.nullness.NullnessChecker',
+//	]
+//}
 
 repositories {
 	mavenCentral()
@@ -33,9 +39,9 @@ dependencies {
   	implementation 'com.google.code.gson:gson'
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-depchain:3.1.4'
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-impl-maven:3.1.4'
-	implementation 'org.springdoc:springdoc-openapi-ui:1.6.8'
-	implementation 'org.springdoc:springdoc-openapi-webflux-core:1.6.8'
-	implementation 'org.springdoc:springdoc-openapi-webflux-ui:1.6.8'
+	implementation 'org.springdoc:springdoc-openapi-ui:1.6.9'
+	implementation 'org.springdoc:springdoc-openapi-webflux-core:1.6.9'
+	implementation 'org.springdoc:springdoc-openapi-webflux-ui:1.6.9'
 	implementation 'com.squareup.tools.build:maven-archeologist:0.0.3.1'
 	implementation 'org.apache.maven.resolver:maven-resolver:1.8.0'
 	implementation ("org.apache.maven.resolver:maven-resolver-impl") {
@@ -54,18 +60,25 @@ dependencies {
 		}
 	}
 	implementation 'org.apache.maven.resolver:maven-resolver-transport-http:1.8.0'
+	implementation 'org.codehaus.plexus:plexus-utils:3.4.2'
+	implementation 'org.eclipse.sisu:sisu-plexus:0.3.5'
+	implementation 'org.eclipse.sisu:org.eclipse.sisu.plexus:0.3.5'
 
 	implementation 'org.jboss.shrinkwrap.resolver:shrinkwrap-resolver-api-maven:3.1.4'
 	implementation 'com.google.inject:guice:5.1.0'
 	implementation 'io.vavr:vavr:0.10.4'
-
+	implementation 'org.jsoup:jsoup:1.15.2'
+	implementation 'org.apache.maven.indexer:indexer-core:6.2.2'
+	implementation 'org.apache.maven.indexer:maven-indexer:6.2.2'
 	compileOnly 'org.projectlombok:lombok'
 	annotationProcessor 'org.projectlombok:lombok'
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
 
-	
+	compileOnly 'org.checkerframework:checker-qual:3.4.0'
+	testCompileOnly 'org.checkerframework:checker-qual:3.4.0'
+	checkerFramework 'org.checkerframework:checker:3.4.0'
 }
 
 tasks.named('test') {

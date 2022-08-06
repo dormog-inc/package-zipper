@@ -9,6 +9,8 @@ import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.eclipse.aether.DefaultRepositorySystemSession;
 import org.eclipse.aether.RepositorySystem;
+import org.springframework.beans.factory.config.ConfigurableBeanFactory;
+import org.springframework.context.annotation.Scope;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
@@ -18,6 +20,7 @@ import java.util.Arrays;
 @Service
 @RequiredArgsConstructor
 @Data
+@Scope(value = ConfigurableBeanFactory.SCOPE_PROTOTYPE)
 public class SessionManager {
     private final Environment env;
     private DefaultRepositorySystemSession session;
