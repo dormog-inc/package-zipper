@@ -10,18 +10,13 @@ plugins {
 }
 
 group = 'com.dor'
-version = '0.0.1-SNAPSHOT'
+version = '1.0.0'
 
 configurations {
 	compileOnly {
 		extendsFrom annotationProcessor
 	}
 }
-//checkerFramework {
-//	checkers = [
-//			'org.checkerframework.checker.nullness.NullnessChecker',
-//	]
-//}
 
 repositories {
 	mavenCentral()
@@ -114,3 +109,7 @@ configure(checkstyleTest) {
 test.dependsOn('checkstyleMain', 'checkstyleTest')
 sourceCompatibility = JavaVersion.VERSION_17
 targetCompatibility = JavaVersion.VERSION_17
+
+bootJar {
+	archiveVersion = ""
+}
