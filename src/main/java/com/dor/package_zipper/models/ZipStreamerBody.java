@@ -10,5 +10,5 @@ import java.util.List;
 @Data
 @Builder
 public class ZipStreamerBody {
-    private List<ZipRemoteEntry> entries;
+    private List<ZipRemoteEntry> files;
 }

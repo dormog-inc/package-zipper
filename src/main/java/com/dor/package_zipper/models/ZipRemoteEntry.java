@@ -9,9 +9,7 @@ import lombok.Data;
 @Data
 @Builder
 public class ZipRemoteEntry {
-    @JsonProperty("ZipPath")
     private String zipPath;
-    @JsonProperty("Url")
     private String url;
 
     @Override
