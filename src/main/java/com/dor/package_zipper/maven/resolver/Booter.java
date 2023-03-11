@@ -37,7 +37,6 @@ public class Booter {
         LocalRepository localRepo = new LocalRepository(repository);
         session.setLocalRepositoryManager(system.newLocalRepositoryManager(session, localRepo));
         Optional.ofNullable(abstractRepositoryListener).ifPresent(session::setRepositoryListener);
-
         return session;
     }
 

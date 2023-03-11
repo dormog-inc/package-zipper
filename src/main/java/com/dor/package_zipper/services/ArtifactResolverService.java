@@ -20,7 +20,6 @@ import org.eclipse.aether.util.graph.transformer.ConflictResolver;
 import org.springframework.beans.factory.ObjectFactory;
 import org.springframework.stereotype.Service;
 
-import java.rmi.Remote;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -41,13 +40,13 @@ public class ArtifactResolverService {
     private final RemoteEntriesService remoteEntriesService;
 
 
-    public ResolvingProcessServiceResult resolveArtifact(Artifact artifact, ShipmentLevel level, List<String> sessionsRemoteRepositoryList) {
+    public ResolvingProcessServiceResult resolveArtifact(Artifact artifact, ShipmentLevel level, List<String> sessionsRemoteRepositoryList, boolean shouldBringClassifiers) {
         List<RemoteRepository> remoteRepositories = getRemoteRepositories(sessionsRemoteRepositoryList);
         return switch (level) {
-            case HEAVY -> heavyLevelResolvingStrategy(artifact, remoteRepositories);
-            case JAR_BASED -> jarsBasedLevelResolvingStrategy(artifact, remoteRepositories);
-            case EXACTLY -> exactlyLevelResolvingStrategy(artifact, remoteRepositories);
-            case SINGLE -> singleLevelResolvingStrategy(artifact, remoteRepositories);
+            case HEAVY -> heavyLevelResolvingStrategy(artifact, remoteRepositories, shouldBringClassifiers);
+            case JAR_BASED -> jarsBasedLevelResolvingStrategy(artifact, remoteRepositories, shouldBringClassifiers);
+            case EXACTLY -> exactlyLevelResolvingStrategy(artifact, remoteRepositories, shouldBringClassifiers);
+            case SINGLE -> singleLevelResolvingStrategy(artifact, remoteRepositories, shouldBringClassifiers);
         };
     }
 
@@ -59,23 +58,24 @@ public class ArtifactResolverService {
         return remoteRepositories;
     }
 
-    public List<ResolvingProcessServiceResult> resolveArtifacts(List<Artifact> artifacts, ShipmentLevel level, List<String> sessionsRemoteRepositoryList) {
+    public List<ResolvingProcessServiceResult> resolveArtifacts(List<Artifact> artifacts, ShipmentLevel level, List<String> sessionsRemoteRepositoryList, boolean shouldBringClassifiers) {
         List<RemoteRepository> remoteRepositories = getRemoteRepositories(sessionsRemoteRepositoryList);
         return switch (level) {
-            case HEAVY -> getZipRemoteEntries(artifacts, originalArtifact -> heavyLevelResolvingStrategy(originalArtifact, remoteRepositories));
-            case JAR_BASED -> getZipRemoteEntries(artifacts, originalArtifact -> jarsBasedLevelResolvingStrategy(originalArtifact, remoteRepositories));
-            case EXACTLY -> getZipRemoteEntries(artifacts, originalArtifact -> exactlyLevelResolvingStrategy(originalArtifact, remoteRepositories));
-            case SINGLE -> getZipRemoteEntries(artifacts, originalArtifact -> singleLevelResolvingStrategy(originalArtifact, remoteRepositories));
+            case HEAVY -> getZipRemoteEntries(artifacts, originalArtifact -> heavyLevelResolvingStrategy(originalArtifact, remoteRepositories, shouldBringClassifiers));
+            case JAR_BASED -> getZipRemoteEntries(artifacts, originalArtifact -> jarsBasedLevelResolvingStrategy(originalArtifact, remoteRepositories, shouldBringClassifiers));
+            case EXACTLY -> getZipRemoteEntries(artifacts, originalArtifact -> exactlyLevelResolvingStrategy(originalArtifact, remoteRepositories, shouldBringClassifiers));
+            case SINGLE -> getZipRemoteEntries(artifacts, originalArtifact -> singleLevelResolvingStrategy(originalArtifact, remoteRepositories, shouldBringClassifiers));
         };
     }
 
-    private ResolvingProcessServiceResult heavyLevelResolvingStrategy(Artifact originalArtifact, List<RemoteRepository> sessionsRemoteRepositoryList) {
+    private ResolvingProcessServiceResult heavyLevelResolvingStrategy(Artifact originalArtifact, List<RemoteRepository> sessionsRemoteRepositoryList, boolean shouldBringClassifiers) {
         return Try.of(() -> {
             SessionManager sessionManagerObject = sessionManager.getObject();
             ResolvingProcessAetherResult resolvingProcessAetherResult = getArtifactsListsFromArtifact(originalArtifact,
                     sessionManagerObject.getSystem(),
                     sessionManagerObject.getSession(),
-                    sessionsRemoteRepositoryList);
+                    sessionsRemoteRepositoryList,
+                    shouldBringClassifiers);
             List<RepositoryAwareAetherArtifact> managedArtifacts = new ArrayList<>(resolvingProcessAetherResult.getArtifactList());
             managedArtifacts.addAll(((EventsCrawlerRepositoryListener) sessionManagerObject.getEventsCrawlerRepositoryListener()).getAllRepositoryAwareDeps());
             List<ZipRemoteEntry> zipRemoteEntryFlux = getZipRemoteEntryFlux(managedArtifacts);
@@ -86,15 +86,16 @@ public class ArtifactResolverService {
     /**
      * Resolve artifacts exactly like a local maven client.
      */
-    private ResolvingProcessServiceResult exactlyLevelResolvingStrategy(Artifact originalArtifact, List<RemoteRepository> sessionsRemoteRepositoryList) {
+    private ResolvingProcessServiceResult exactlyLevelResolvingStrategy(Artifact originalArtifact, List<RemoteRepository> sessionsRemoteRepositoryList, boolean shouldBringClassifiers) {
         try {
             SessionManager sessionManagerObject = sessionManager.getObject();
             ResolvingProcessAetherResult resolvingProcessAetherResult = getArtifactsListsFromArtifact(originalArtifact,
-                    sessionManagerObject.getSystem(), sessionManagerObject.getSession(), sessionsRemoteRepositoryList);
+                    sessionManagerObject.getSystem(), sessionManagerObject.getSession(), sessionsRemoteRepositoryList, shouldBringClassifiers);
             Set<RepositoryAwareAetherArtifact> managedArtifacts =
                     ((EventsCrawlerRepositoryListener) sessionManagerObject.getEventsCrawlerRepositoryListener()).getAllRepositoryAwareDeps();
             return new ResolvingProcessServiceResult(getZipRemoteEntryFlux(managedArtifacts.stream().toList()), resolvingProcessAetherResult.getExceptionMessages());
         } catch (Exception e) {
+            e.printStackTrace();
             return createErrorResolvingProcessServiceResult(e);
         }
     }
@@ -107,13 +108,14 @@ public class ArtifactResolverService {
      * Resolve artifacts without import scope. This isn't a full nor traditional Maven strategy,
      * but this not-pom-friendly strategy turned out to be useful in many cases.
      */
-    private ResolvingProcessServiceResult jarsBasedLevelResolvingStrategy(Artifact originalArtifact, List<RemoteRepository> sessionsRemoteRepositoryList) {
+    private ResolvingProcessServiceResult jarsBasedLevelResolvingStrategy(Artifact originalArtifact, List<RemoteRepository> sessionsRemoteRepositoryList, boolean shouldBringClassifiers) {
         return Try.of(() -> {
             CleanBooterSessionManager sessionManagerObject = cleanBooterSessionManager.getObject();
             ResolvingProcessAetherResult resolvingProcessAetherResult = getArtifactsListsFromArtifact(originalArtifact,
                     sessionManagerObject.getSystem(),
                     sessionManagerObject.getSession(),
-                    sessionsRemoteRepositoryList);
+                    sessionsRemoteRepositoryList,
+                    shouldBringClassifiers);
             return new ResolvingProcessServiceResult(getZipRemoteEntryFlux(new ArrayList<>(resolvingProcessAetherResult
                     .getArtifactList())),
                     resolvingProcessAetherResult.getExceptionMessages());
@@ -123,7 +125,7 @@ public class ArtifactResolverService {
     /**
      * Resolve one artifact.
      */
-    private ResolvingProcessServiceResult singleLevelResolvingStrategy(Artifact originalArtifact, List<RemoteRepository> sessionsRemoteRepositoryList) {
+    private ResolvingProcessServiceResult singleLevelResolvingStrategy(Artifact originalArtifact, List<RemoteRepository> sessionsRemoteRepositoryList, boolean shouldBringClassifiers) {
         return Try.of(() -> {
             ResolvingProcessAetherResult singleArtifactResolving = singleArtifactResolving(originalArtifact,
                     cleanBooterSessionManager.getObject().getSystem(),
@@ -158,8 +160,9 @@ public class ArtifactResolverService {
     private ResolvingProcessAetherResult getArtifactsListsFromArtifact(Artifact originalArtifact,
                                                                        RepositorySystem system,
                                                                        DefaultRepositorySystemSession session,
-                                                                       List<RemoteRepository> sessionsRemoteRepositoryList
-                                                                       ) throws ArtifactDescriptorException {
+                                                                       List<RemoteRepository> sessionsRemoteRepositoryList,
+                                                                       boolean shouldBringClassifiers
+    ) throws ArtifactDescriptorException {
         session.setConfigProperty(ConflictResolver.CONFIG_PROP_VERBOSE, true);
         session.setConfigProperty(DependencyManagerUtils.CONFIG_PROP_VERBOSE, true);
 
@@ -170,7 +173,7 @@ public class ArtifactResolverService {
         descriptorRequest.setRepositories(sessionsRemoteRepositoryList);
         ArtifactDescriptorResult descriptorResult = system.readArtifactDescriptor(session, descriptorRequest);
 
-        DependencyRequest dependencyRequest = getDependencyRequest(descriptorRequest, descriptorResult);
+        DependencyRequest dependencyRequest = getDependencyRequest(descriptorRequest, descriptorResult, shouldBringClassifiers);
 
         try {
             DependencyResult dependencyResult = system.resolveDependencies(session, dependencyRequest);
@@ -213,8 +216,8 @@ public class ArtifactResolverService {
         }
     }
 
-    private DependencyRequest getDependencyRequest(ArtifactDescriptorRequest descriptorRequest, ArtifactDescriptorResult descriptorResult) {
-        CollectRequest collectRequest = getCollectRequest(descriptorRequest, descriptorResult);
+    private DependencyRequest getDependencyRequest(ArtifactDescriptorRequest descriptorRequest, ArtifactDescriptorResult descriptorResult, boolean shouldBringClassifiers) {
+        CollectRequest collectRequest = getCollectRequest(descriptorRequest, descriptorResult, shouldBringClassifiers);
 
         DependencyFilter classpathFilter = DependencyFilterUtils.classpathFilter(JavaScopes.COMPILE,
                 JavaScopes.RUNTIME,
@@ -224,10 +227,17 @@ public class ArtifactResolverService {
         return new DependencyRequest(collectRequest, classpathFilter);
     }
 
-    private CollectRequest getCollectRequest(ArtifactDescriptorRequest descriptorRequest, ArtifactDescriptorResult descriptorResult) {
+    private CollectRequest getCollectRequest(ArtifactDescriptorRequest descriptorRequest, ArtifactDescriptorResult descriptorResult, boolean shouldBringClassifiers) {
         CollectRequest collectRequest = new CollectRequest();
         collectRequest.setRootArtifact(descriptorResult.getArtifact());
-        collectRequest.setDependencies(descriptorResult.getDependencies());
+        List<Dependency> dependencies = new ArrayList<>(descriptorResult.getDependencies());
+        if (shouldBringClassifiers) {
+            for (var dep : descriptorResult.getDependencies()) {
+                ClassifiersHandler.addClassifierArtifacts(descriptorResult, dependencies, dep.getArtifact());
+            }
+            ClassifiersHandler.addClassifierArtifacts(descriptorResult, dependencies, descriptorResult.getArtifact());
+        }
+        collectRequest.setDependencies(dependencies);
         collectRequest.setManagedDependencies(descriptorResult.getManagedDependencies());
         collectRequest.setRepositories(descriptorRequest.getRepositories());
         return collectRequest;

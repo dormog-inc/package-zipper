@@ -8,7 +8,6 @@ import org.eclipse.aether.repository.ArtifactRepository;
 import org.eclipse.aether.repository.RemoteRepository;
 
 import java.io.File;
-import java.nio.file.Files;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -16,10 +15,12 @@ import java.util.stream.Collectors;
 
 /**
  * A simplistic {@link org.eclipse.aether.RepositorySystem} listener that extracts dependencies from events.
+ * This repository listener prevents Jars from getting downloaded, since it is made to help to extract the dependencies list, and not downloading pom files.
  */
 @Slf4j
 public class EventsCrawlerRepositoryListener extends AbstractEventsCrawlerRepositoryListener {
     private final Set<RepositoryAwareAetherArtifact> allDeps = new HashSet<>();
+    private final Set<String> allDepsString = new HashSet<>();
 
     @Override
     public Set<Artifact> getAllDeps() {
@@ -34,22 +35,26 @@ public class EventsCrawlerRepositoryListener extends AbstractEventsCrawlerReposi
     public void artifactDownloaded(RepositoryEvent event) {
         Optional<File> optionalFile = Optional.ofNullable(event.getFile());
         optionalFile.ifPresent(file -> {
+
             log.info("The event's path is {}", event.getFile().getAbsolutePath());
-            ArtifactRepository repository = event.getRepository();
-            if (repository instanceof RemoteRepository remoteRepository) {
-                allDeps.add(new RepositoryAwareAetherArtifact(event.getArtifact(), remoteRepository.getUrl()));
-            }
-            if (event.getArtifact().getExtension().equals("jar")) {
-                if (file.exists()) {
-                    try {
-                        Files.delete(file.toPath());
-                    } catch (Exception e) {
-                        log.error("Could not delete file from FileSystem. Reason was {}", e.getCause().toString());
-                    }
-                } else {
-                    log.info("Note - the file {} does not exists on the system, even downloading operation was considered a success.", event.getArtifact().toString());
-                }
-            }
         });
+    }
+
+    @Override
+    public void artifactDownloading(RepositoryEvent event) {
+        // Return null to prevent the artifact from being installed
+        if (!event.getArtifact().getExtension().equals("jar")) {
+            super.artifactDownloading(event);
+        }
+    }
+
+
+    @Override
+    public void artifactResolved(RepositoryEvent event) {
+        if (event.getRepository() instanceof RemoteRepository remoteRepository && !allDepsString.contains(event.getArtifact().toString())) {
+            allDeps.add(new RepositoryAwareAetherArtifact(event.getArtifact(), remoteRepository.getUrl()));
+            allDepsString.add(event.getArtifact().toString());
+        }
+        super.artifactResolved(event);
     }
 }

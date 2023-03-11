@@ -47,8 +47,9 @@ public class PackageZipperController {
             @RequestParam String artifactId,
             @Schema(type = "string", example = "8.5.1")
             @RequestParam String version,
-            @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level) {
-        return packageStreamsManager.streamZippedArtifact(new Artifact(groupId, artifactId, version), level);
+            @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level,
+            @RequestParam(defaultValue = "false") boolean shouldBringClassifiers) {
+        return packageStreamsManager.streamZippedArtifact(new Artifact(groupId, artifactId, version), level, shouldBringClassifiers);
     }
 
     @Tag(name = "artifacts")
@@ -57,10 +58,11 @@ public class PackageZipperController {
             @Schema(type = "string", example = "org.jetbrains:annotations:23.0.0")
             @PathVariable String artifact,
             @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level,
+            @RequestParam(defaultValue = "false") boolean shouldBringClassifiers,
             @Schema(type = "list", example = "https://maven.ceon.pl/artifactory/repo")
             @RequestParam(name = "customRepositoriesList", required = false) List<String> optionalCustomRepositoriesList) {
         List<String> sessionsRemoteRepositoryList = getSessionsRemoteRepositoryList(optionalCustomRepositoriesList);
-        return packageStreamsManager.streamZippedArtifact(new Artifact(artifact), level, sessionsRemoteRepositoryList);
+        return packageStreamsManager.streamZippedArtifact(new Artifact(artifact), level, shouldBringClassifiers, sessionsRemoteRepositoryList);
     }
 
     private List<String> getSessionsRemoteRepositoryList(List<String> optionalCustomRepositoriesList) {
@@ -75,18 +77,20 @@ public class PackageZipperController {
             @Schema(type = "list", example = "[\"org.jetbrains:annotations:23.0.0\", \"org/jetbrains/annotations/22.0.0\"]")
             @RequestBody List<String> artifactStringList,
             @RequestParam(defaultValue = "EXACTLY") ShipmentLevel level,
+            @RequestParam(defaultValue = "false") boolean shouldBringClassifiers,
             @RequestParam(name = "customRepositoriesList", required = false) List<String> optionalCustomRepositoriesList) {
         List<String> sessionRemoteRepositoryList = getSessionsRemoteRepositoryList(optionalCustomRepositoriesList);
         var artifactsList = artifactStringList.stream().map(Artifact::new).toList();
-        return packageStreamsManager.getMultiFileStreamResponse(artifactsList, level, sessionRemoteRepositoryList);
+        return packageStreamsManager.getMultiFileStreamResponse(artifactsList, level, sessionRemoteRepositoryList, shouldBringClassifiers);
     }
 
     @GetMapping(value = "/zip/plugin/")
     @Tag(name = "plugins")
     public ResponseEntity<Flux<DataBuffer>> streamGradlePlugins(@RequestParam String artifact,
                                                                 @RequestParam String version,
-                                                                @RequestParam(defaultValue = "HEAVY") ShipmentLevel level) {
-        return packageStreamsManager.streamZippedArtifact(GradlePluginsHandler.formatGradlePluginPomName(artifact, version), level);
+                                                                @RequestParam(defaultValue = "HEAVY") ShipmentLevel level,
+                                                                @RequestParam(defaultValue = "false") boolean shouldBringClassifiers) {
+        return packageStreamsManager.streamZippedArtifact(GradlePluginsHandler.formatGradlePluginPomName(artifact, version), level, shouldBringClassifiers);
     }
 
     @Tag(name = "plugins")
@@ -94,11 +98,12 @@ public class PackageZipperController {
     public ResponseEntity<Flux<DataBuffer>> streamMultipleArtifactsZip(
             @Schema(type = "object", example = "{\"io.github.bla.plugin-id\": \"1.0.3\"}")
             @RequestBody Map<String, String> mapOfArtifactAndVersion,
+            @RequestParam(defaultValue = "false") boolean shouldBringClassifiers,
             @RequestParam(defaultValue = "HEAVY") ShipmentLevel level) {
         List<Artifact> artifactsList = mapOfArtifactAndVersion
                 .entrySet()
                 .stream()
                 .map((entry) -> GradlePluginsHandler.formatGradlePluginPomName(entry.getKey(), entry.getValue())).toList();
-        return packageStreamsManager.getMultiFileStreamResponse(artifactsList, level, defaultRemoteRepositoriesUrls);
+        return packageStreamsManager.getMultiFileStreamResponse(artifactsList, level, defaultRemoteRepositoriesUrls, shouldBringClassifiers);
     }
 }

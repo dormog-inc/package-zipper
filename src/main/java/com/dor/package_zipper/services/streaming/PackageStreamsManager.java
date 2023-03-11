@@ -42,12 +42,12 @@ public class PackageStreamsManager {
         );
     }
 
-    public ResponseEntity<Flux<DataBuffer>> streamZippedArtifact(Artifact artifact, ShipmentLevel level) {
-        return streamZippedArtifact(artifact, level, defaultRemoteRepositoriesUrls);
+    public ResponseEntity<Flux<DataBuffer>> streamZippedArtifact(Artifact artifact, ShipmentLevel level, boolean shouldBringClassifiers) {
+        return streamZippedArtifact(artifact, level, shouldBringClassifiers, defaultRemoteRepositoriesUrls);
     }
 
-    public ResponseEntity<Flux<DataBuffer>> streamZippedArtifact(Artifact artifact, ShipmentLevel level, List<String> sessionsRemoteRepositoryUrls) {
-        ResolvingProcessServiceResult resolvingProcessServiceResult = artifactResolverService.resolveArtifact(artifact, level, sessionsRemoteRepositoryUrls);
+    public ResponseEntity<Flux<DataBuffer>> streamZippedArtifact(Artifact artifact, ShipmentLevel level, boolean shouldBringClassifiers, List<String> sessionsRemoteRepositoryUrls) {
+        ResolvingProcessServiceResult resolvingProcessServiceResult = artifactResolverService.resolveArtifact(artifact, level, sessionsRemoteRepositoryUrls, shouldBringClassifiers);
         String fileName = artifact.getArtifactFullName();
         var response = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -62,9 +62,10 @@ public class PackageStreamsManager {
 
     public ResponseEntity<Flux<DataBuffer>> getMultiFileStreamResponse(List<Artifact> artifactsList,
                                                                        ShipmentLevel level,
-                                                                       List<String> sessionRemoteRepositoryList) {
+                                                                       List<String> sessionRemoteRepositoryList,
+                                                                       boolean shouldBringClassifiers) {
         List<String> exceptions = new ArrayList<>();
-        final Flux<DataBuffer> dataBufferFlux = getDataBufferFlux(artifactsList, level, sessionRemoteRepositoryList, exceptions);
+        final Flux<DataBuffer> dataBufferFlux = getDataBufferFlux(artifactsList, level, sessionRemoteRepositoryList, exceptions, shouldBringClassifiers);
         String fileName = "multi-" + artifactsList.get(0).getArtifactId();
         var response = ResponseEntity.ok()
                 .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -89,10 +90,11 @@ public class PackageStreamsManager {
                 .body(dataBufferFlux);
     }
 
-    public Flux<DataBuffer> getDataBufferFlux(List<Artifact> artifactsList, ShipmentLevel level, List<String> sessionRemoteRepositoryList, List<String> exceptions) {
+    public Flux<DataBuffer> getDataBufferFlux(List<Artifact> artifactsList, ShipmentLevel level, List<String> sessionRemoteRepositoryList, List<String> exceptions, boolean shouldBringClassifiers) {
         List<ResolvingProcessServiceResult> resolvingProcessServiceResults = artifactResolverService.resolveArtifacts(artifactsList,
                 level,
-                sessionRemoteRepositoryList);
+                sessionRemoteRepositoryList,
+                shouldBringClassifiers);
         return parseResolvingProcessResults(resolvingProcessServiceResults, exceptions);
     }
 

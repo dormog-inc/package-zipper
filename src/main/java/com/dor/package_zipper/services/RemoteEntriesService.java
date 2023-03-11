@@ -20,16 +20,18 @@ public class RemoteEntriesService {
 
     public List<ZipRemoteEntry> getRemoteEntryFromLibrary(Artifact artifact, String repositoryUrl) {
         List<ZipRemoteEntry> zipEntries = new ArrayList<>();
+        boolean isClassifierArtifact = !artifact.getClassifier().equals("");
+        String classifierConcatenation = isClassifierArtifact ? "-" + artifact.getClassifier() : "";
         String path = String.format("%s/%s/%s/%s-%s",
                 artifact.getGroupId().replace(".", "/"),
                 artifact.getArtifactId(),
                 artifact.getVersion(),
                 artifact.getArtifactId(),
-                artifact.getVersion());
+                artifact.getVersion() + classifierConcatenation);
         String libPath = String.format("%s.%s", path, artifact.getPackagingType());
         String libUrl = String.format("%s/%s", repositoryUrl, libPath);
         zipEntries.add(new ZipRemoteEntry(libPath, libUrl));
-        addEquivalentPomUrlForEveryJar(artifact, zipEntries, path, repositoryUrl);
+        if (!isClassifierArtifact) addEquivalentPomUrlForEveryJar(artifact, zipEntries, path, repositoryUrl);
         return zipEntries;
     }
 
