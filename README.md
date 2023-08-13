@@ -5,7 +5,7 @@
 
 A simple online packages dwnloader.
 package-zipper is a java project for downloading and streaming java packages and there dependencies as zip files from maven repository.
-this project depends on [zipstreamer](https://github.com/scosman/zipstreamer) for streaming all the package dependencies into a zip file. [Demo here](http://package-zipper.herokuapp.com/swagger-ui/index.html).
+this project depends on [zipstreamer](https://github.com/scosman/zipstreamer) for streaming all the package dependencies into a zip file. [Demo here](https://package-zipper.onrender.com/webjars/swagger-ui/index.html).
 
 Highlights include:
 
