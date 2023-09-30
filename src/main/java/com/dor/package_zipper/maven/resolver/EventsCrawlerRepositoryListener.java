@@ -35,7 +35,6 @@ public class EventsCrawlerRepositoryListener extends AbstractEventsCrawlerReposi
     public void artifactDownloaded(RepositoryEvent event) {
         Optional<File> optionalFile = Optional.ofNullable(event.getFile());
         optionalFile.ifPresent(file -> {
-
             log.info("The event's path is {}", event.getFile().getAbsolutePath());
         });
     }
@@ -43,11 +42,19 @@ public class EventsCrawlerRepositoryListener extends AbstractEventsCrawlerReposi
     @Override
     public void artifactDownloading(RepositoryEvent event) {
         // Return null to prevent the artifact from being installed
-        if (!event.getArtifact().getExtension().equals("jar")) {
-            super.artifactDownloading(event);
-        }
+//        if (!event.getArtifact().getExtension().equals("jar")) {
+//            super.artifactDownloading(event);
+//        }
     }
-
+    @Override
+    public void artifactInstalling(RepositoryEvent event) {
+    }
+    @Override
+    public void metadataInstalling(RepositoryEvent event) {
+    }
+    @Override
+    public void metadataDownloading(RepositoryEvent event) {
+    }
 
     @Override
     public void artifactResolved(RepositoryEvent event) {

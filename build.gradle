@@ -70,6 +70,7 @@ dependencies {
 	testImplementation 'org.springframework.boot:spring-boot-starter-test'
 	testImplementation 'io.projectreactor:reactor-test'
 	testImplementation 'org.springframework.restdocs:spring-restdocs-mockmvc'
+	implementation("org.apache.commons:commons-compress:1.24.0")
 
 	compileOnly 'org.checkerframework:checker-qual:3.4.0'
 	testCompileOnly 'org.checkerframework:checker-qual:3.4.0'
