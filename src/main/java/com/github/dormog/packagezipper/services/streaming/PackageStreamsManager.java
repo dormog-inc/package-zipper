@@ -52,9 +52,8 @@ public class PackageStreamsManager {
                 .header(HttpHeaders.CONTENT_DISPOSITION,
                         "attachment; filename=%s.zip".formatted(fileName))
                 .contentType(MediaType.APPLICATION_OCTET_STREAM);
-        Optional.ofNullable(resolvingProcessServiceResult.getExceptionMessages()).ifPresent(exceptionMessages -> {
-            response.header(HttpHeaders.WARNING, exceptionMessages.toArray(String[]::new));
-        });
+        Optional.ofNullable(resolvingProcessServiceResult.getExceptionMessages())
+                .ifPresent(exceptionMessages -> response.header(HttpHeaders.WARNING, exceptionMessages.toArray(String[]::new)));
         return response
                 .body(getZipStream(resolvingProcessServiceResult.getZipRemoteEntries()));
     }

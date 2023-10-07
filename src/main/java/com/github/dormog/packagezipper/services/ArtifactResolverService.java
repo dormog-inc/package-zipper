@@ -43,7 +43,6 @@ public class ArtifactResolverService {
         List<RemoteRepository> remoteRepositories = getRemoteRepositories(sessionsRemoteRepositoryList);
         return switch (level) {
             case HEAVY -> heavyLevelResolvingStrategy(artifact, remoteRepositories, shouldBringClassifiers);
-            case JAR_BASED -> jarsBasedLevelResolvingStrategy(artifact, remoteRepositories, shouldBringClassifiers);
             case EXACTLY -> exactlyLevelResolvingStrategy(artifact, remoteRepositories, shouldBringClassifiers);
             case SINGLE -> singleLevelResolvingStrategy(artifact, remoteRepositories, shouldBringClassifiers);
         };
@@ -61,7 +60,6 @@ public class ArtifactResolverService {
         List<RemoteRepository> remoteRepositories = getRemoteRepositories(sessionsRemoteRepositoryList);
         return switch (level) {
             case HEAVY -> getZipRemoteEntries(artifacts, originalArtifact -> heavyLevelResolvingStrategy(originalArtifact, remoteRepositories, shouldBringClassifiers));
-            case JAR_BASED -> getZipRemoteEntries(artifacts, originalArtifact -> jarsBasedLevelResolvingStrategy(originalArtifact, remoteRepositories, shouldBringClassifiers));
             case EXACTLY -> getZipRemoteEntries(artifacts, originalArtifact -> exactlyLevelResolvingStrategy(originalArtifact, remoteRepositories, shouldBringClassifiers));
             case SINGLE -> getZipRemoteEntries(artifacts, originalArtifact -> singleLevelResolvingStrategy(originalArtifact, remoteRepositories, shouldBringClassifiers));
         };
