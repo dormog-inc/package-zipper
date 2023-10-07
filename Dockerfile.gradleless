@@ -1,0 +1,8 @@
+FROM openjdk:17-slim-buster
+
+# Add the necessary files and directories
+WORKDIR /app
+COPY build/libs /app/
+
+# Run the jar file
+ENTRYPOINT ["java", "-jar", "package-zipper.jar"]
